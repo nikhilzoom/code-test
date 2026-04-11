@@ -1,0 +1,13 @@
+# Route definitions for the Transaction Service
+# Enables PHP 8 attribute-based routing for all controllers under src/Controller/
+controllers:
+    resource:
+        path: ../src/Controller/
+        namespace: App\Controller
+    type: attribute
+# Enables PHP 8 attribute-based routing for all controllers under src/Controller/
+controllers:
+    resource:
+        path: ../src/Controller/
+        namespace: App\Controller
+    type: attribute

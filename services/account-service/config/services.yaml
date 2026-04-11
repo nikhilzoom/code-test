@@ -1,0 +1,16 @@
+services:
+    _defaults:
+        autowire: true
+        autoconfigure: true
+
+    App\:
+        resource: '../src/'
+        exclude:
+            - '../src/Entity/'
+            - '../src/Kernel.php'
+
+    # Bind the notification interface to the SMTP implementation.
+    # To switch to a dedicated notification microservice, change this binding
+    # to point to a new HttpNotificationService class — AccountService requires no changes.
+    App\Service\NotificationServiceInterface:
+        class: App\Service\SmtpNotificationService

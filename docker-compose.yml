@@ -1,0 +1,147 @@
+services:
+  nginx:
+    image: nginx:latest
+    ports:
+      - "8000:80" # change the system port if default port 80 is already in use
+    volumes:
+      - ./infrastructure/nginx/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - api-gateway
+      - user-service
+      - account-service
+      - transaction-service
+      - ledger-service
+    networks:
+      - app-network
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: services/api-gateway/Dockerfile
+    environment:
+      APP_ENV: dev
+      APP_SECRET: a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6
+      JWT_SECRET: "super-secret-jwt-key-change-in-production"
+    networks:
+      - app-network
+
+  user-service:
+    build:
+      context: .
+      dockerfile: services/user-service/Dockerfile
+    environment:
+      APP_ENV: dev
+      APP_SECRET: b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7
+      DATABASE_URL: mysql://root:root@mysql:3306/user_service
+      JWT_SECRET: "super-secret-jwt-key-change-in-production"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  account-service:
+    build:
+      context: .
+      dockerfile: services/account-service/Dockerfile
+    environment:
+      APP_ENV: dev
+      APP_SECRET: c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8
+      DATABASE_URL: mysql://root:root@mysql:3306/account_service
+      MAILER_DSN: smtp://mailhog:1025
+    depends_on:
+      mysql:
+        condition: service_healthy
+      mailhog:
+        condition: service_started
+    networks:
+      - app-network
+
+  transaction-service:
+    build:
+      context: .
+      dockerfile: services/transaction-service/Dockerfile
+    environment:
+      APP_ENV: dev
+      APP_SECRET: d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9
+      DATABASE_URL: mysql://root:root@mysql:3306/transaction_service
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  ledger-service:
+    build:
+      context: .
+      dockerfile: services/ledger-service/Dockerfile
+    environment:
+      APP_ENV: dev
+      APP_SECRET: e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0
+      DATABASE_URL: mysql://root:root@mysql:3306/ledger_service
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  mysql:
+    image: mysql:8.0
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: fund_transfer
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./infrastructure/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - app-network
+
+  redis:
+    image: redis:latest
+    networks:
+      - app-network
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    networks:
+      - app-network
+
+  adminer:
+    image: adminer:latest
+    ports:
+      - "8080:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: mysql
+    depends_on:
+      - mysql
+    networks:
+      - app-network
+
+  swagger-ui:
+    image: swaggerapi/swagger-ui:latest
+    ports:
+      - "8081:8080"
+    environment:
+      SWAGGER_JSON: /api-docs/openapi.yaml
+      BASE_URL: /docs
+    volumes:
+      - ./infrastructure/swagger:/api-docs
+    networks:
+      - app-network
+
+volumes:
+  mysql_data:
+
+networks:
+  app-network:
+    driver: bridge

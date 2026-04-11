@@ -1,0 +1,722 @@
+openapi: "3.0.3"
+info:
+  title: Fund Transfer System API
+  description: |
+    Multi-service PHP/Symfony fund transfer platform.
+    All endpoints are accessible through NGINX on port 80.
+    Each service is routed by path prefix.
+  version: "1.0.0"
+  contact:
+    name: Fund Transfer System
+
+servers:
+  - url: http://localhost
+    description: Local Docker environment (via NGINX)
+
+tags:
+  - name: Health
+    description: Service liveness checks
+  - name: Auth
+    description: Registration and login (user-service)
+  - name: Users
+    description: User management (user-service)
+  - name: Accounts
+    description: Account management (account-service)
+  - name: Transactions
+    description: Fund transfer transactions (transaction-service)
+  - name: Ledger
+    description: Immutable financial ledger entries (ledger-service)
+
+security:
+  - BearerAuth: []
+
+paths:
+
+  # ── Auth endpoints ────────────────────────────────────────────────────────
+
+  /user/register:
+    post:
+      tags: [Auth]
+      summary: Register a new user account
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+            example:
+              name: Alice Smith
+              email: alice@example.com
+              password: secret123
+      responses:
+        "201":
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          description: Email already registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: Email already registered.
+                code: 409
+
+  /user/login:
+    post:
+      tags: [Auth]
+      summary: Login and receive a JWT
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+            example:
+              email: alice@example.com
+              password: secret123
+      responses:
+        "200":
+          description: Login successful — JWT returned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ── Health endpoints ──────────────────────────────────────────────────────
+
+  /user/health:
+    get:
+      tags: [Health]
+      summary: User Service health check
+      security: []
+      responses:
+        "200":
+          description: Service is alive
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /account/health:
+    get:
+      tags: [Health]
+      summary: Account Service health check
+      security: []
+      responses:
+        "200":
+          description: Service is alive
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /transaction/health:
+    get:
+      tags: [Health]
+      summary: Transaction Service health check
+      security: []
+      responses:
+        "200":
+          description: Service is alive
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /ledger/health:
+    get:
+      tags: [Health]
+      summary: Ledger Service health check
+      security: []
+      responses:
+        "200":
+          description: Service is alive
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /api/health:
+    get:
+      tags: [Health]
+      summary: API Gateway health check
+      security: []
+      responses:
+        "200":
+          description: Service is alive
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  # ── Users ─────────────────────────────────────────────────────────────────
+
+  /user:
+    get:
+      tags: [Users]
+      summary: List all users
+      responses:
+        "200":
+          description: Array of all users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+    post:
+      tags: [Users]
+      summary: Create a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserRequest"
+            example:
+              name: Alice Smith
+              email: alice@example.com
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /user/{id}:
+    get:
+      tags: [Users]
+      summary: Get a user by ID
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: User found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  # ── Accounts ──────────────────────────────────────────────────────────────
+
+  /account:
+    post:
+      tags: [Accounts]
+      summary: Create a new account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAccountRequest"
+            example:
+              userId: 1
+              balance: "1000.00"
+              currency: USD
+      responses:
+        "201":
+          description: Account created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Account"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /account/{id}:
+    get:
+      tags: [Accounts]
+      summary: Get an account by ID
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Account found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Account"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /account/{id}/debit:
+    post:
+      tags: [Accounts]
+      summary: Debit (subtract) an amount from an account
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AmountRequest"
+            example:
+              amount: "50.00"
+      responses:
+        "200":
+          description: Account debited, updated account returned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Account"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /account/{id}/credit:
+    post:
+      tags: [Accounts]
+      summary: Credit (add) an amount to an account
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AmountRequest"
+            example:
+              amount: "200.00"
+      responses:
+        "200":
+          description: Account credited, updated account returned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Account"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  # ── Transactions ──────────────────────────────────────────────────────────
+
+  /transaction:
+    post:
+      tags: [Transactions]
+      summary: Initiate a fund transfer between two accounts
+      description: |
+        Creates a pending transaction, debits the source account,
+        credits the destination account, and records both ledger entries.
+        Returns the completed (or failed) transaction.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTransactionRequest"
+            example:
+              sourceAccountId: 1
+              destinationAccountId: 2
+              amount: "100.00"
+              currency: USD
+      responses:
+        "201":
+          description: Transaction created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transaction"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /transaction/{id}:
+    get:
+      tags: [Transactions]
+      summary: Get a transaction by ID
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+      responses:
+        "200":
+          description: Transaction found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transaction"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  # ── Ledger ────────────────────────────────────────────────────────────────
+
+  /ledger/entry:
+    post:
+      tags: [Ledger]
+      summary: Record a new ledger entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLedgerEntryRequest"
+            example:
+              transactionId: 1
+              accountId: 2
+              entryType: debit
+              amount: "100.00"
+      responses:
+        "201":
+          description: Ledger entry recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LedgerEntry"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /ledger/account/{accountId}:
+    get:
+      tags: [Ledger]
+      summary: Get all ledger entries for an account
+      parameters:
+        - name: accountId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Array of ledger entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LedgerEntry"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /ledger/transaction/{transactionId}:
+    get:
+      tags: [Ledger]
+      summary: Get all ledger entries for a transaction
+      parameters:
+        - name: transactionId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Array of ledger entries (both legs of the transfer)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LedgerEntry"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+# ── Components ───────────────────────────────────────────────────────────────
+
+components:
+
+  parameters:
+    IdParam:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        code:
+          type: integer
+      required: [error, code]
+
+    RegisterRequest:
+      type: object
+      required: [name, email, password]
+      properties:
+        name:
+          type: string
+          maxLength: 100
+          example: Alice Smith
+        email:
+          type: string
+          format: email
+          maxLength: 255
+          example: alice@example.com
+        password:
+          type: string
+          minLength: 6
+          example: secret123
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          example: alice@example.com
+        password:
+          type: string
+          example: secret123
+
+    TokenResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+
+    CreateUserRequest:
+      type: object
+      required: [name, email]
+      properties:
+        name:
+          type: string
+          maxLength: 100
+          example: Alice Smith
+        email:
+          type: string
+          format: email
+          maxLength: 255
+          example: alice@example.com
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: Alice Smith
+        email:
+          type: string
+          example: alice@example.com
+        createdAt:
+          type: string
+          format: date-time
+
+    CreateAccountRequest:
+      type: object
+      required: [userId, balance, currency]
+      properties:
+        userId:
+          type: integer
+          example: 1
+        balance:
+          type: string
+          example: "1000.00"
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+          example: USD
+
+    Account:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        userId:
+          type: integer
+          example: 1
+        balance:
+          type: string
+          example: "1000.00"
+        currency:
+          type: string
+          example: USD
+        createdAt:
+          type: string
+          format: date-time
+
+    AmountRequest:
+      type: object
+      required: [amount]
+      properties:
+        amount:
+          type: string
+          example: "50.00"
+
+    CreateTransactionRequest:
+      type: object
+      required: [sourceAccountId, destinationAccountId, amount, currency]
+      properties:
+        sourceAccountId:
+          type: integer
+          example: 1
+        destinationAccountId:
+          type: integer
+          example: 2
+        amount:
+          type: string
+          example: "100.00"
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+          example: USD
+
+    Transaction:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        sourceAccountId:
+          type: integer
+          example: 1
+        destinationAccountId:
+          type: integer
+          example: 2
+        amount:
+          type: string
+          example: "100.00"
+        currency:
+          type: string
+          example: USD
+        status:
+          type: string
+          enum: [pending, completed, failed]
+          example: completed
+        createdAt:
+          type: string
+          format: date-time
+
+    CreateLedgerEntryRequest:
+      type: object
+      required: [transactionId, accountId, entryType, amount]
+      properties:
+        transactionId:
+          type: integer
+          example: 1
+        accountId:
+          type: integer
+          example: 2
+        entryType:
+          type: string
+          enum: [debit, credit]
+          example: debit
+        amount:
+          type: string
+          example: "100.00"
+
+    LedgerEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        transactionId:
+          type: integer
+          example: 1
+        accountId:
+          type: integer
+          example: 2
+        entryType:
+          type: string
+          enum: [debit, credit]
+          example: debit
+        amount:
+          type: string
+          example: "100.00"
+        createdAt:
+          type: string
+          format: date-time
+
+  responses:
+    BadRequest:
+      description: Invalid request body
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: Invalid JSON body.
+            code: 400
+
+    Unauthorized:
+      description: Missing or invalid JWT
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: Invalid or expired token.
+            code: 401
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: Resource not found.
+            code: 404
+
+    ServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: An unexpected error occurred.
+            code: 500

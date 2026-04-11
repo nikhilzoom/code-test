@@ -1,0 +1,62 @@
+# ── Composer ──────────────────────────────────────────────────────────────────
+vendor/
+composer.phar
+
+# ── Symfony cache, logs, and runtime ──────────────────────────────────────────
+var/
+services/*/var/
+
+# ── Environment files (contain secrets — never commit) ────────────────────────
+.env.local
+.env.local.php
+.env.*.local
+services/*/.env.local
+services/*/.env.local.php
+services/*/.env.*.local
+
+# ── PHPUnit ───────────────────────────────────────────────────────────────────
+.phpunit.result.cache
+.phpunit.cache/
+services/*/.phpunit.result.cache
+services/*/.phpunit.cache/
+
+# ── PHPStan ───────────────────────────────────────────────────────────────────
+.phpstan.cache/
+services/*/.phpstan.cache/
+
+# ── Docker ────────────────────────────────────────────────────────────────────
+# Do not ignore docker-compose.yml — it is part of the project
+.docker/
+
+# ── IDE and editor files ──────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ── OS generated files ────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+logs/
+services/*/logs/
+
+# ── Build artifacts ───────────────────────────────────────────────────────────
+*.phar
+*.zip
+*.tar.gz
+
+# ── MySQL data volume (if mounted locally) ────────────────────────────────────
+infrastructure/mysql/data/
+
+# ── Doctrine proxies (generated at runtime) ───────────────────────────────────
+services/*/var/cache/

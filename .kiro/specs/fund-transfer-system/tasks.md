@@ -1,0 +1,321 @@
+# Implementation Plan: Fund Transfer System
+
+## Overview
+
+Incremental build of a PHP/Symfony microservices platform: five independently deployable services (API Gateway, User Service, Account Service, Transaction Service, Ledger Service) orchestrated via Docker Compose, proxied through NGINX, backed by MySQL and Redis. Each task builds on the previous, ending with a fully wired and tested system.
+
+## Tasks
+
+- [x] 1. Scaffold root project structure and shared library
+  - Create the root directory layout: `services/`, `infrastructure/docker/`, `infrastructure/nginx/`, `shared/php-common/`
+  - Create `shared/php-common/composer.json` declaring the `PhpCommon` namespace under `src/`
+  - Create `shared/php-common/src/Repository/RepositoryInterface.php` with `findById`, `findAll`, `save`, `delete` method signatures and full PHPDoc
+  - Create `shared/php-common/src/Factory/FactoryInterface.php` with `create(array $data): object` and full PHPDoc
+  - Create `shared/php-common/src/DTO/HealthResponseDTO.php` with `status` property and PHPDoc
+  - Create `shared/php-common/src/Exception/NotFoundException.php` extending `\RuntimeException` with PHPDoc
+  - _Requirements: 1.1, 1.4, 8.1, 8.4, 9.1_
+
+- [x] 2. Initialize Symfony application skeletons for all five services
+  - [x] 2.1 Initialize `services/api-gateway` as a Symfony application
+    - Create `composer.json` requiring `symfony/framework-bundle`, `symfony/runtime`, `symfony/http-client`, and the shared library as a path repository
+    - Create minimal `config/`, `public/index.php`, `src/Kernel.php` with PHPDoc
+    - _Requirements: 2.1, 2.11_
+  - [x] 2.2 Initialize `services/user-service` as a Symfony application
+    - Create `composer.json` requiring `symfony/framework-bundle`, `symfony/runtime`, `doctrine/orm`, `doctrine/doctrine-bundle`, and the shared library
+    - Create minimal `config/`, `public/index.php`, `src/Kernel.php` with PHPDoc
+    - _Requirements: 2.2, 2.12_
+  - [x] 2.3 Initialize `services/account-service` as a Symfony application
+    - Create `composer.json` requiring `symfony/framework-bundle`, `symfony/runtime`, `doctrine/orm`, `doctrine/doctrine-bundle`, and the shared library
+    - Create minimal `config/`, `public/index.php`, `src/Kernel.php` with PHPDoc
+    - _Requirements: 2.3, 2.13_
+  - [x] 2.4 Initialize `services/transaction-service` as a Symfony application
+    - Create `composer.json` requiring `symfony/framework-bundle`, `symfony/runtime`, `symfony/http-client`, `doctrine/orm`, `doctrine/doctrine-bundle`, and the shared library
+    - Create minimal `config/`, `public/index.php`, `src/Kernel.php` with PHPDoc
+    - _Requirements: 2.4, 2.14_
+  - [x] 2.5 Initialize `services/ledger-service` as a Symfony application
+    - Create `composer.json` requiring `symfony/framework-bundle`, `symfony/runtime`, `doctrine/orm`, `doctrine/doctrine-bundle`, and the shared library
+    - Create minimal `config/`, `public/index.php`, `src/Kernel.php` with PHPDoc
+    - _Requirements: 2.5, 2.15_
+
+- [x] 3. Implement health endpoints for all five services
+  - [x] 3.1 Create `HealthController` in `api-gateway`
+    - Implement `GET /health` returning `JsonResponse(["status" => "ok"], 200)`
+    - Include `@Route`, `@return`, and endpoint description PHPDoc on the action method
+    - _Requirements: 2.6, 9.3_
+  - [x] 3.2 Create `HealthController` in `user-service`
+    - Implement `GET /health` returning `JsonResponse(["status" => "ok"], 200)` with full PHPDoc
+    - _Requirements: 2.7, 9.3_
+  - [x] 3.3 Create `HealthController` in `account-service`
+    - Implement `GET /health` returning `JsonResponse(["status" => "ok"], 200)` with full PHPDoc
+    - _Requirements: 2.8, 9.3_
+  - [x] 3.4 Create `HealthController` in `transaction-service`
+    - Implement `GET /health` returning `JsonResponse(["status" => "ok"], 200)` with full PHPDoc
+    - _Requirements: 2.9, 9.3_
+  - [x] 3.5 Create `HealthController` in `ledger-service`
+    - Implement `GET /health` returning `JsonResponse(["status" => "ok"], 200)` with full PHPDoc
+    - _Requirements: 2.10, 9.3_
+
+- [x] 4. Create Dockerfiles and docker-compose.yml
+  - [x] 4.1 Write `Dockerfile` for each of the five services
+    - Base image: `php:8.3-fpm`
+    - Install extensions: `pdo`, `pdo_mysql`, `intl`, `opcache` via `docker-php-ext-install`; `redis` via `pecl install redis && docker-php-ext-enable redis`
+    - `WORKDIR /var/www/html`, `COPY . .`, `RUN composer install --no-dev --optimize-autoloader`
+    - `EXPOSE` the correct port per service (9000–9004), `CMD ["php-fpm"]`
+    - Create one Dockerfile per service: `api-gateway`, `user-service`, `account-service`, `transaction-service`, `ledger-service`
+    - _Requirements: 3.1, 3.2_
+  - [x] 4.2 Write root-level `docker-compose.yml`
+    - Define services: `nginx`, `api-gateway`, `user-service`, `account-service`, `transaction-service`, `ledger-service`, `mysql` (latest), `redis` (latest)
+    - Attach all services to a shared `app-network` bridge network
+    - Expose `nginx` on host port 80
+    - Reference each service's `Dockerfile` via `build:` directive
+    - Add `mysql` environment variables: `MYSQL_ROOT_PASSWORD`, `MYSQL_DATABASE`
+    - _Requirements: 3.3, 3.4, 3.5, 3.6, 3.7_
+
+- [x] 5. Configure NGINX reverse proxy
+  - Create `infrastructure/nginx/default.conf`
+  - Add `server { listen 80; }` block with five `location` blocks routing `/api`, `/user`, `/account`, `/transaction`, `/ledger` to the corresponding service on its internal port
+  - Use `proxy_pass`, `proxy_set_header Host`, `proxy_set_header X-Real-IP` directives
+  - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6_
+
+- [x] 6. Create `.env` files for all five services
+  - Create `services/api-gateway/.env` containing `DB_HOST=mysql`, `REDIS_HOST=redis`, `APP_ENV=dev`, `APP_SECRET`
+  - Create `services/user-service/.env` containing `DB_HOST=mysql`, `REDIS_HOST=redis`, `DATABASE_URL`, `APP_ENV=dev`, `APP_SECRET`
+  - Create `services/account-service/.env` containing `DB_HOST=mysql`, `REDIS_HOST=redis`, `DATABASE_URL`, `APP_ENV=dev`, `APP_SECRET`
+  - Create `services/transaction-service/.env` containing `DB_HOST=mysql`, `REDIS_HOST=redis`, `DATABASE_URL`, `APP_ENV=dev`, `APP_SECRET`
+  - Create `services/ledger-service/.env` containing `DB_HOST=mysql`, `REDIS_HOST=redis`, `DATABASE_URL`, `APP_ENV=dev`, `APP_SECRET`
+  - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6_
+
+- [x] 7. Configure code quality tooling per service
+  - [x] 7.1 Create `phpstan.neon` at the root of each service directory
+    - Set `level: 1` and `paths: [src]` for all five services
+    - _Requirements: 6.1, 6.3_
+  - [x] 7.2 Create `phpunit.xml` at the root of each service directory
+    - Configure `bootstrap="vendor/autoload.php"`, `<testsuites>` pointing to `tests/`, and `<source>` pointing to `src/`
+    - _Requirements: 6.2, 6.4_
+
+- [x] 8. Implement User Service domain layer
+  - [x] 8.1 Create `User` entity in `services/user-service/src/Entity/User.php`
+    - Properties: `id` (int), `name` (string, 100), `email` (string, 255, unique), `createdAt` (DateTimeImmutable)
+    - Full Doctrine ORM annotations (`@ORM\Entity`, `@ORM\Table`, `@ORM\Column`, etc.) and PHPDoc on every property and method
+    - Getters and setters for all properties
+    - _Requirements: 8.1, 9.1_
+  - [x] 8.2 Create `UserDTO` in `services/user-service/src/DTO/UserDTO.php`
+    - Properties: `name` (string), `email` (string); PHPDoc on class and all properties
+    - _Requirements: 8.4, 9.1_
+  - [x] 8.3 Create `UserRepositoryInterface` in `services/user-service/src/Repository/UserRepositoryInterface.php`
+    - Extend `RepositoryInterface` from shared library; add `findByEmail(string $email): ?User`; full PHPDoc
+    - _Requirements: 8.1, 9.1_
+  - [x] 8.4 Create `UserRepository` in `services/user-service/src/Repository/UserRepository.php`
+    - Implement `UserRepositoryInterface` using Doctrine `EntityManagerInterface`; PHPDoc on class and all methods
+    - _Requirements: 8.1, 8.3, 9.1_
+  - [x] 8.5 Create `UserFactory` in `services/user-service/src/Factory/UserFactory.php`
+    - Implement `FactoryInterface`; `create(array $data): User` instantiates and populates a `User` entity; PHPDoc on class and method
+    - _Requirements: 8.4, 9.1_
+  - [x] 8.6 Create `UserService` in `services/user-service/src/Service/UserService.php`
+    - Constructor-inject `UserRepositoryInterface` (not the concrete class) and `UserFactory`
+    - Methods: `createUser(array $data): User`, `getUserById(int $id): User`, `getAllUsers(): array`
+    - Throw `NotFoundException` from shared library when entity not found
+    - Full PHPDoc on class and all public methods
+    - _Requirements: 8.2, 8.3, 9.1_
+  - [x] 8.7 Create `UserController` in `services/user-service/src/Controller/UserController.php`
+    - Constructor-inject `UserService`
+    - Endpoints: `POST /user` (create), `GET /user/{id}` (get by id), `GET /user` (list all)
+    - Each action: `@Route`, `@param`, `@return`, description, request/response format in PHPDoc
+    - Return JSON error envelope `{"error": "...", "code": N}` on exceptions
+    - _Requirements: 9.3, 9.1_
+  - [x] 8.8 Write unit tests for `UserService`
+    - Mock `UserRepositoryInterface` and `UserFactory` using `createMock()`
+    - Test `createUser` happy path, `getUserById` happy path, `getUserById` throws `NotFoundException`, `getAllUsers` returns empty array
+    - _Requirements: 10.1, 10.2, 10.3, 10.4_
+  - [x] 8.9 Write unit tests for `UserRepository`
+    - Mock `EntityManagerInterface`; test `save`, `findById`, `findAll`, `delete`, `findByEmail`
+    - _Requirements: 10.1, 10.3, 10.4_
+  - [x] 8.10 Write unit tests for `UserController`
+    - Mock `UserService`; test each endpoint action for success and exception paths
+    - _Requirements: 10.1, 10.2, 10.4_
+
+- [x] 9. Implement Account Service domain layer
+  - [x] 9.1 Create `Account` entity in `services/account-service/src/Entity/Account.php`
+    - Properties: `id`, `userId` (int), `balance` (decimal string), `currency` (string, 3), `createdAt`
+    - Full Doctrine ORM annotations and PHPDoc
+    - _Requirements: 8.1, 9.1_
+  - [x] 9.2 Create `AccountDTO` in `services/account-service/src/DTO/AccountDTO.php`
+    - Properties: `userId`, `balance`, `currency`; PHPDoc on class and all properties
+    - _Requirements: 8.4, 9.1_
+  - [x] 9.3 Create `AccountRepositoryInterface` in `services/account-service/src/Repository/AccountRepositoryInterface.php`
+    - Extend `RepositoryInterface`; add `findByUserId(int $userId): array`; full PHPDoc
+    - _Requirements: 8.1, 9.1_
+  - [x] 9.4 Create `AccountRepository` implementing `AccountRepositoryInterface` using Doctrine; PHPDoc on all methods
+    - _Requirements: 8.1, 8.3, 9.1_
+  - [x] 9.5 Create `AccountFactory` implementing `FactoryInterface`; `create(array $data): Account`; PHPDoc
+    - _Requirements: 8.4, 9.1_
+  - [x] 9.6 Create `AccountService` in `services/account-service/src/Service/AccountService.php`
+    - Constructor-inject `AccountRepositoryInterface` and `AccountFactory`
+    - Methods: `createAccount(array $data): Account`, `getAccountById(int $id): Account`, `debit(int $id, string $amount): Account`, `credit(int $id, string $amount): Account`
+    - Throw `NotFoundException` when account not found; PHPDoc on all public methods
+    - _Requirements: 8.2, 8.3, 9.1_
+  - [x] 9.7 Create `AccountController` in `services/account-service/src/Controller/AccountController.php`
+    - Endpoints: `POST /account`, `GET /account/{id}`, `POST /account/{id}/debit`, `POST /account/{id}/credit`
+    - Full PHPDoc with `@Route`, `@param`, `@return`, description, and request/response format on each action
+    - _Requirements: 9.3, 9.1_
+  - [x] 9.8 Write unit tests for `AccountService`
+    - Mock `AccountRepositoryInterface` and `AccountFactory`; test create, getById (found/not found), debit, credit
+    - _Requirements: 10.1, 10.2, 10.3, 10.4_
+  - [x] 9.9 Write unit tests for `AccountRepository`
+    - Mock `EntityManagerInterface`; test all interface methods including `findByUserId`
+    - _Requirements: 10.1, 10.3, 10.4_
+  - [x] 9.10 Write unit tests for `AccountController`
+    - Mock `AccountService`; test each endpoint for success and exception paths
+    - _Requirements: 10.1, 10.2, 10.4_
+
+- [x] 10. Implement Transaction Service domain layer
+  - [x] 10.1 Create `Transaction` entity in `services/transaction-service/src/Entity/Transaction.php`
+    - Properties: `id`, `sourceAccountId` (int), `destinationAccountId` (int), `amount` (decimal string), `currency` (string, 3), `status` (string: pending/completed/failed), `createdAt`
+    - Full Doctrine ORM annotations and PHPDoc
+    - _Requirements: 8.1, 9.1_
+  - [x] 10.2 Create `TransactionDTO` in `services/transaction-service/src/DTO/TransactionDTO.php`
+    - Properties: `sourceAccountId`, `destinationAccountId`, `amount`, `currency`; PHPDoc
+    - _Requirements: 8.4, 9.1_
+  - [x] 10.3 Create `TransactionRepositoryInterface` extending `RepositoryInterface`; add `findByAccountId(int $accountId): array`; PHPDoc
+    - _Requirements: 8.1, 9.1_
+  - [x] 10.4 Create `TransactionRepository` implementing `TransactionRepositoryInterface` using Doctrine; PHPDoc on all methods
+    - _Requirements: 8.1, 8.3, 9.1_
+  - [x] 10.5 Create `TransactionFactory` implementing `FactoryInterface`; `create(array $data): Transaction`; PHPDoc
+    - _Requirements: 8.4, 9.1_
+  - [x] 10.6 Create `TransactionService` in `services/transaction-service/src/Service/TransactionService.php`
+    - Constructor-inject `TransactionRepositoryInterface`, `TransactionFactory`, and Symfony `HttpClientInterface`
+    - Method `initiateTransfer(array $data): Transaction`:
+      - Create transaction with status `pending`
+      - POST to `http://account-service/account/{sourceId}/debit`
+      - POST to `http://account-service/account/{destinationId}/credit`
+      - POST to `http://ledger-service/ledger/entry` for both legs
+      - On success set status `completed`; on any failure set status `failed` and log error
+    - Method `getTransactionById(int $id): Transaction`; throw `NotFoundException` if not found
+    - Full PHPDoc on class and all public methods
+    - _Requirements: 8.2, 8.3, 9.1_
+  - [x] 10.7 Create `TransactionController` in `services/transaction-service/src/Controller/TransactionController.php`
+    - Endpoints: `POST /transaction` (initiate transfer), `GET /transaction/{id}` (get by id)
+    - Full PHPDoc with `@Route`, `@param`, `@return`, description, and request/response format
+    - _Requirements: 9.3, 9.1_
+  - [x] 10.8 Write unit tests for `TransactionService`
+    - Mock `TransactionRepositoryInterface`, `TransactionFactory`, and `HttpClientInterface`
+    - Test `initiateTransfer` happy path (status becomes `completed`), failure path (status becomes `failed`), `getTransactionById` found/not found
+    - _Requirements: 10.1, 10.2, 10.3, 10.4_
+  - [x] 10.9 Write unit tests for `TransactionRepository`
+    - Mock `EntityManagerInterface`; test all interface methods including `findByAccountId`
+    - _Requirements: 10.1, 10.3, 10.4_
+  - [x] 10.10 Write unit tests for `TransactionController`
+    - Mock `TransactionService`; test initiate and get endpoints for success and exception paths
+    - _Requirements: 10.1, 10.2, 10.4_
+
+- [x] 11. Implement Ledger Service domain layer
+  - [x] 11.1 Create `LedgerEntry` entity in `services/ledger-service/src/Entity/LedgerEntry.php`
+    - Properties: `id`, `transactionId` (int), `accountId` (int), `entryType` (string: debit/credit), `amount` (decimal string), `createdAt`
+    - Full Doctrine ORM annotations and PHPDoc
+    - _Requirements: 8.1, 9.1_
+  - [x] 11.2 Create `LedgerEntryDTO` in `services/ledger-service/src/DTO/LedgerEntryDTO.php`
+    - Properties: `transactionId`, `accountId`, `entryType`, `amount`; PHPDoc
+    - _Requirements: 8.4, 9.1_
+  - [x] 11.3 Create `LedgerEntryRepositoryInterface` extending `RepositoryInterface`; add `findByAccountId(int $accountId): array` and `findByTransactionId(int $transactionId): array`; PHPDoc
+    - _Requirements: 8.1, 9.1_
+  - [x] 11.4 Create `LedgerEntryRepository` implementing `LedgerEntryRepositoryInterface` using Doctrine; PHPDoc on all methods
+    - _Requirements: 8.1, 8.3, 9.1_
+  - [x] 11.5 Create `LedgerEntryFactory` implementing `FactoryInterface`; `create(array $data): LedgerEntry`; PHPDoc
+    - _Requirements: 8.4, 9.1_
+  - [x] 11.6 Create `LedgerService` in `services/ledger-service/src/Service/LedgerService.php`
+    - Constructor-inject `LedgerEntryRepositoryInterface` and `LedgerEntryFactory`
+    - Methods: `recordEntry(array $data): LedgerEntry`, `getEntriesByAccount(int $accountId): array`, `getEntriesByTransaction(int $transactionId): array`
+    - Full PHPDoc on class and all public methods
+    - _Requirements: 8.2, 8.3, 9.1_
+  - [x] 11.7 Create `LedgerController` in `services/ledger-service/src/Controller/LedgerController.php`
+    - Endpoints: `POST /ledger/entry` (record entry), `GET /ledger/account/{accountId}` (entries by account), `GET /ledger/transaction/{transactionId}` (entries by transaction)
+    - Full PHPDoc with `@Route`, `@param`, `@return`, description, and request/response format
+    - _Requirements: 9.3, 9.1_
+  - [x] 11.8 Write unit tests for `LedgerService`
+    - Mock `LedgerEntryRepositoryInterface` and `LedgerEntryFactory`
+    - Test `recordEntry` happy path, `getEntriesByAccount` with results and empty, `getEntriesByTransaction`
+    - _Requirements: 10.1, 10.2, 10.3, 10.4_
+  - [x] 11.9 Write unit tests for `LedgerEntryRepository`
+    - Mock `EntityManagerInterface`; test all interface methods including `findByAccountId` and `findByTransactionId`
+    - _Requirements: 10.1, 10.3, 10.4_
+  - [x] 11.10 Write unit tests for `LedgerController`
+    - Mock `LedgerService`; test each endpoint for success and exception paths
+    - _Requirements: 10.1, 10.2, 10.4_
+
+- [x] 12. Implement API Gateway proxy layer
+  - [x] 12.1 Create `RequestFactory` in `services/api-gateway/src/Factory/RequestFactory.php`
+    - Implement `FactoryInterface`; `create(array $data): object` builds an outbound request descriptor (method, url, headers, body); PHPDoc
+    - _Requirements: 8.4, 9.1_
+  - [x] 12.2 Create `ProxyService` in `services/api-gateway/src/Service/ProxyService.php`
+    - Constructor-inject Symfony `HttpClientInterface` and a route map (path prefix → service base URL)
+    - Method `forward(Request $request): ResponseInterface` resolves the target URL, strips the prefix, and forwards the request
+    - Return 502 JSON error envelope on `HttpException` or transport failure
+    - Full PHPDoc on class and all public methods
+    - _Requirements: 8.2, 9.1_
+  - [x] 12.3 Create `ProxyController` in `services/api-gateway/src/Controller/ProxyController.php`
+    - Catch-all route forwarding all non-health requests to `ProxyService`
+    - Full PHPDoc with `@Route`, `@param`, `@return`, description
+    - _Requirements: 9.3, 9.1_
+  - [x] 12.4 Write unit tests for `ProxyService`
+    - Mock `HttpClientInterface`; test successful forward, 502 on transport failure, correct URL rewriting per prefix
+    - _Requirements: 10.1, 10.2, 10.3, 10.4_
+  - [x] 12.5 Write unit tests for `ProxyController`
+    - Mock `ProxyService`; test successful proxy response and error response passthrough
+    - _Requirements: 10.1, 10.2, 10.4_
+
+- [x] 13. Checkpoint — verify all unit tests pass
+  - Run `vendor/bin/phpunit` in each service directory and confirm zero failures
+  - Run `vendor/bin/phpstan analyse src/` in each service directory and confirm zero errors
+  - Ask the user if any questions arise before proceeding.
+
+- [x] 14. Write structural property-based tests
+  - [x] 14.1 Write Property 1 structural test — entity companion classes
+    - Create `tests/Structural/EntityCompanionTest.php` in each service that has entities (user, account, transaction, ledger)
+    - Use `RecursiveDirectoryIterator` to enumerate all classes under `src/Entity/`
+    - For each entity class assert that `{Entity}RepositoryInterface`, `{Entity}Repository`, and `{Entity}Factory` exist in the same service
+    - Tag: `// Feature: fund-transfer-system, Property 1: Every entity has companion repository interface, repository implementation, and factory`
+    - _Requirements: 8.1, 8.4_
+  - [x] 14.2 Write Property 2 structural test — service depends only on interfaces
+    - Create `tests/Structural/ServiceDependencyTest.php` in each service
+    - Use PHP Reflection to inspect constructor parameters of all classes under `src/Service/`
+    - Assert every repository-typed parameter resolves to a PHP `interface` declaration (type hint ends in `Interface`)
+    - Tag: `// Feature: fund-transfer-system, Property 2: Service classes depend only on repository interfaces`
+    - _Requirements: 8.2, 8.3_
+  - [x] 14.3 Write Property 3 structural test — PHPDoc on all public declarations
+    - Create `tests/Structural/PhpDocTest.php` in each service
+    - Use Reflection to enumerate all public classes, methods, and properties under `src/`
+    - Assert each has a non-empty doc comment (`getDocComment() !== false`)
+    - Tag: `// Feature: fund-transfer-system, Property 3: All public classes, methods, and properties carry PHPDoc blocks`
+    - _Requirements: 9.1_
+  - [x] 14.4 Write Property 4 structural test — controller route methods have required PHPDoc tags
+    - Create `tests/Structural/ControllerDocTest.php` in each service
+    - Use Reflection to find all methods in classes under `src/Controller/` that carry a `@Route` annotation or `#[Route]` attribute
+    - Assert each such method's doc comment contains `@param` (or explicit note of no params), `@return`, and a prose description
+    - Tag: `// Feature: fund-transfer-system, Property 4: Controller route methods include required PHPDoc tags`
+    - _Requirements: 9.3_
+  - [x] 14.5 Write Property 5 structural test — every service/repository class has a test file with mocks
+    - Create `tests/Structural/TestCoverageTest.php` in each service
+    - Use `RecursiveDirectoryIterator` to enumerate classes under `src/Service/` and `src/Repository/`
+    - For each class assert a corresponding `*Test.php` exists under `tests/`
+    - Assert the test file source contains at least one call to `createMock` or `getMockBuilder`
+    - Assert the test file contains at least one method prefixed `test` or annotated `@test`
+    - Tag: `// Feature: fund-transfer-system, Property 5: Every service and repository class has a test file that uses mocks and covers all public methods`
+    - _Requirements: 10.1, 10.3, 10.4_
+
+- [x] 15. Write root README
+  - Create `README.md` at the project root
+  - Include sections: Overview, Prerequisites, Build (`docker-compose build`), Start (`docker-compose up`), Service URLs (`http://localhost/api`, `/user`, `/account`, `/transaction`, `/ledger`), Health check URLs (`http://localhost/{prefix}/health` for each service), Project Structure
+  - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5_
+
+- [x] 16. Final checkpoint — full system verification
+  - Ensure all PHPUnit test suites pass across all five services
+  - Ensure PHPStan exits 0 for all five services
+  - Ask the user if any questions arise before considering the implementation complete.
+
+## Notes
+
+- Each task references specific requirements for traceability
+- Structural tests (task 14) use PHP Reflection — no randomized inputs; they assert invariants over the full set of classes
+- Property tests validate architectural correctness properties defined in the design document (Properties 1–5)
+- All repository dependencies in service constructors must be typed against interfaces, never concrete classes
+- All public classes, methods, and properties must carry PHPDoc blocks before implementation is considered complete
