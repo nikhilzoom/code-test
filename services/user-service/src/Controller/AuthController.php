@@ -6,16 +6,19 @@ namespace App\Controller;
 
 use App\Service\AuthService;
 use PhpCommon\Exception\AuthenticationException;
+use PhpCommon\Security\JwtService;
+use PhpCommon\Security\TokenBlacklistService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Annotation\Route;
 
 /**
- * Controller exposing HTTP endpoints for user registration and login.
+ * Controller exposing HTTP endpoints for user registration, login, and logout.
  *
- * These endpoints are public — no JWT is required to access them.
- * On successful login a signed JWT is returned for use on protected endpoints.
+ * Register and login are public — no JWT is required to access them.
+ * Logout requires a valid JWT and blacklists its JTI in Redis so it cannot
+ * be reused even before it expires.
  *
  * @package App\Controller
  */
@@ -29,13 +32,34 @@ class AuthController extends AbstractController
     private AuthService $authService;
 
     /**
+     * The JWT service used to decode tokens on logout.
+     *
+     * @var JwtService
+     */
+    private JwtService $jwtService;
+
+    /**
+     * The token blacklist service backed by Redis.
+     *
+     * @var TokenBlacklistService
+     */
+    private TokenBlacklistService $blacklistService;
+
+    /**
      * Construct a new AuthController.
      *
-     * @param AuthService $authService The authentication service.
+     * @param AuthService           $authService      The authentication service.
+     * @param JwtService            $jwtService       The JWT service for decoding tokens.
+     * @param TokenBlacklistService $blacklistService The Redis-backed token blacklist.
      */
-    public function __construct(AuthService $authService)
-    {
-        $this->authService = $authService;
+    public function __construct(
+        AuthService $authService,
+        JwtService $jwtService,
+        TokenBlacklistService $blacklistService
+    ) {
+        $this->authService      = $authService;
+        $this->jwtService       = $jwtService;
+        $this->blacklistService = $blacklistService;
     }
 
     /**
@@ -127,5 +151,53 @@ class AuthController extends AbstractController
         } catch (AuthenticationException $e) {
             return new JsonResponse(['error' => $e->getMessage(), 'code' => 401], 401);
         }
+    }
+
+    /**
+     * Logout the authenticated user by blacklisting their current JWT.
+     *
+     * Decodes the Bearer token, extracts the JTI and expiry, then stores
+     * the JTI in Redis with a TTL equal to the token's remaining lifetime.
+     * Any subsequent request using this token will be rejected with 401.
+     *
+     * Request format : POST /user/logout
+     *                  Authorization: Bearer <token>
+     *
+     * Response format: HTTP 200 {"message": "Logged out successfully."}
+     *
+     * Error responses: HTTP 401 {"error": "Authorization header missing.", "code": 401}
+     *
+     * @Route("/user/logout", name="user_logout", methods={"POST"})
+     *
+     * @param Request $request The incoming HTTP request with Authorization header.
+     *
+     * @return JsonResponse Success message (HTTP 200) or an error envelope.
+     */
+    #[Route('/user/logout', name: 'user_logout', methods: ['POST'])]
+    public function logout(Request $request): JsonResponse
+    {
+        $authHeader = $request->headers->get('Authorization');
+
+        if ($authHeader === null || !str_starts_with($authHeader, 'Bearer ')) {
+            return new JsonResponse(['error' => 'Authorization header missing.', 'code' => 401], 401);
+        }
+
+        $token = substr($authHeader, 7);
+
+        try {
+            $payload = $this->jwtService->decode($token);
+        } catch (AuthenticationException $e) {
+            return new JsonResponse(['error' => 'Invalid or expired token.', 'code' => 401], 401);
+        }
+
+        $jti = (string) ($payload->jti ?? '');
+        $exp = (int) ($payload->exp ?? 0);
+
+        if ($jti !== '') {
+            $ttl = max(1, $exp - time());
+            $this->blacklistService->blacklist($jti, $ttl);
+        }
+
+        return new JsonResponse(['message' => 'Logged out successfully.']);
     }
 }

@@ -53,8 +53,8 @@ class JwtService
     /**
      * Encode a payload into a signed JWT string.
      *
-     * Automatically adds `iat` (issued-at) and `exp` (expiry = iat + 3600)
-     * claims to the provided payload before signing.
+     * Automatically adds `iat` (issued-at), `exp` (expiry = iat + 3600),
+     * and `jti` (unique token ID) claims to the provided payload before signing.
      *
      * @param array<string, mixed> $payload Associative array of claims to include in the token.
      *                                      Must contain at minimum `sub` (integer user ID).
@@ -67,6 +67,7 @@ class JwtService
 
         $payload['iat'] = $now;
         $payload['exp'] = $now + self::TTL;
+        $payload['jti'] = bin2hex(random_bytes(16));
 
         return JWT::encode($payload, $this->secret, self::ALGORITHM);
     }

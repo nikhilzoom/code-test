@@ -13,17 +13,14 @@ use Symfony\Component\HttpKernel\Event\RequestEvent;
 use Symfony\Component\HttpKernel\KernelEvents;
 
 /**
- * Symfony kernel.request subscriber that enforces JWT authentication.
+ * Symfony kernel.request subscriber that enforces JWT blacklist checks.
  *
- * Runs before routing on every inbound request. Public routes (register,
- * login, health checks) are whitelisted and pass through without a token.
- * All other routes require a valid `Authorization: Bearer <token>` header.
+ * In the current architecture nginx routes service-prefixed requests directly
+ * to each downstream service, bypassing the API Gateway. This subscriber runs
+ * inside user-service to verify that tokens used on protected endpoints have
+ * not been revoked via logout.
  *
- * On a valid token the subscriber:
- *   - Checks the token JTI against the Redis blacklist (revoked tokens)
- *   - Extracts the `sub` (userId) claim from the payload
- *   - Injects it as the `X-Authenticated-User-Id` request header
- *   - Strips the `Authorization` header so it is not forwarded downstream
+ * Public routes (register, login, health) are whitelisted and bypass the check.
  *
  * @package App\EventSubscriber
  */
@@ -31,24 +28,24 @@ class JwtAuthSubscriber implements EventSubscriberInterface
 {
     /**
      * Routes that are accessible without a JWT.
-     * Each entry is [method, path] where path is an exact match.
      *
      * @var array<int, array{method: string, path: string}>
      */
     private const PUBLIC_ROUTES = [
         ['method' => 'POST', 'path' => '/user/register'],
         ['method' => 'POST', 'path' => '/user/login'],
+        ['method' => 'POST', 'path' => '/user/logout'],
     ];
 
     /**
-     * The JWT service used to verify incoming tokens.
+     * The JWT service used to decode tokens.
      *
      * @var JwtService
      */
     private JwtService $jwtService;
 
     /**
-     * The token blacklist service used to check revoked tokens.
+     * The token blacklist service backed by Redis.
      *
      * @var TokenBlacklistService
      */
@@ -69,8 +66,6 @@ class JwtAuthSubscriber implements EventSubscriberInterface
     /**
      * Returns the events this subscriber listens to.
      *
-     * Subscribes to kernel.request at priority 10 (before routing).
-     *
      * @return array<string, array<int, int|string>>
      */
     public static function getSubscribedEvents(): array
@@ -81,12 +76,10 @@ class JwtAuthSubscriber implements EventSubscriberInterface
     }
 
     /**
-     * Validate the JWT on every protected inbound request.
+     * Check the JWT blacklist on every protected inbound request.
      *
-     * Public routes and health endpoints bypass validation. For all other
-     * routes, a valid non-blacklisted Bearer token is required. On success
-     * the authenticated userId is injected as X-Authenticated-User-Id and
-     * the Authorization header is stripped before forwarding downstream.
+     * Decodes the Bearer token and checks its JTI against the Redis blacklist.
+     * Returns 401 if the token has been revoked via logout.
      *
      * @param RequestEvent $event The kernel request event.
      *
@@ -102,66 +95,37 @@ class JwtAuthSubscriber implements EventSubscriberInterface
         $path    = $request->getPathInfo();
         $method  = $request->getMethod();
 
-        // Allow health check endpoints on any service prefix
+        // Allow health check endpoints
         if (str_ends_with($path, '/health')) {
             return;
         }
 
-        // Allow explicitly whitelisted public routes
+        // Allow whitelisted public routes
         foreach (self::PUBLIC_ROUTES as $route) {
             if ($method === $route['method'] && $path === $route['path']) {
                 return;
             }
         }
 
-        // Require Authorization header
         $authHeader = $request->headers->get('Authorization');
-        if ($authHeader === null || $authHeader === '') {
-            $event->setResponse(new JsonResponse(
-                ['error' => 'Authorization header missing.', 'code' => 401],
-                401
-            ));
-            return;
-        }
-
-        // Extract Bearer token
-        if (!str_starts_with($authHeader, 'Bearer ')) {
-            $event->setResponse(new JsonResponse(
-                ['error' => 'Invalid or expired token.', 'code' => 401],
-                401
-            ));
-            return;
+        if ($authHeader === null || !str_starts_with($authHeader, 'Bearer ')) {
+            return; // Let the route handle missing auth
         }
 
         $token = substr($authHeader, 7);
 
-        // Verify token signature and expiry
         try {
             $payload = $this->jwtService->decode($token);
         } catch (AuthenticationException $e) {
-            $event->setResponse(new JsonResponse(
-                ['error' => 'Invalid or expired token.', 'code' => 401],
-                401
-            ));
-            return;
+            return; // Let the route handle invalid tokens
         }
 
-        // Check token blacklist (logout revocation)
         $jti = (string) ($payload->jti ?? '');
         if ($jti !== '' && $this->blacklistService->isBlacklisted($jti)) {
             $event->setResponse(new JsonResponse(
                 ['error' => 'Token has been revoked.', 'code' => 401],
                 401
             ));
-            return;
         }
-
-        // Inject userId and strip Authorization header
-        // Keep Authorization header for logout so user-service can blacklist the token
-        $userId = (int) ($payload->sub ?? 0);
-        $request->headers->set('X-Authenticated-User-Id', (string) $userId);
-        $request->headers->set('X-Token-Jti', $jti);
-        $request->headers->set('X-Token-Exp', (string) ($payload->exp ?? 0));
-        $request->headers->remove('Authorization');
     }
 }

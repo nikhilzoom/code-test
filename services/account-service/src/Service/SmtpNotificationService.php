@@ -40,7 +40,7 @@ class SmtpNotificationService implements NotificationServiceInterface
      *
      * @var string
      */
-    private const USER_SERVICE_URL = 'http://user-service';
+    private const USER_SERVICE_URL = 'http://nginx';
 
     /**
      * HTTP client used to call user-service.

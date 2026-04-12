@@ -110,15 +110,15 @@ class TransactionService
             $currency      = $transaction->getCurrency();
             $transactionId = $transaction->getId();
 
-            $this->httpClient->request('POST', sprintf('http://account-service/account/%d/debit', $sourceId), [
+            $this->httpClient->request('POST', sprintf('http://nginx/account/%d/debit', $sourceId), [
                 'json' => ['amount' => $amount],
             ]);
 
-            $this->httpClient->request('POST', sprintf('http://account-service/account/%d/credit', $destinationId), [
+            $this->httpClient->request('POST', sprintf('http://nginx/account/%d/credit', $destinationId), [
                 'json' => ['amount' => $amount],
             ]);
 
-            $this->httpClient->request('POST', 'http://ledger-service/ledger/entry', [
+            $this->httpClient->request('POST', 'http://nginx/ledger/entry', [
                 'json' => [
                     'transactionId' => $transactionId,
                     'accountId'     => $sourceId,
@@ -128,7 +128,7 @@ class TransactionService
                 ],
             ]);
 
-            $this->httpClient->request('POST', 'http://ledger-service/ledger/entry', [
+            $this->httpClient->request('POST', 'http://nginx/ledger/entry', [
                 'json' => [
                     'transactionId' => $transactionId,
                     'accountId'     => $destinationId,

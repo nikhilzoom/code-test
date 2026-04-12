@@ -12,9 +12,23 @@ services:
         arguments:
             $secret: '%env(JWT_SECRET)%'
 
+    redis.connection:
+        class: Redis
+        calls:
+            - [connect, ['%env(REDIS_HOST)%', 6379]]
+
+    PhpCommon\Security\TokenBlacklistService:
+        arguments:
+            $redis: '@redis.connection'
+
+    PhpCommon\RateLimit\RateLimiterService:
+        arguments:
+            $redis: '@redis.connection'
+
     App\EventSubscriber\JwtAuthSubscriber:
         arguments:
             $jwtService: '@PhpCommon\Security\JwtService'
+            $blacklistService: '@PhpCommon\Security\TokenBlacklistService'
         tags:
             - { name: kernel.event_subscriber }
 

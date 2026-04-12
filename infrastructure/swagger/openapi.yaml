@@ -3,15 +3,15 @@ info:
   title: Fund Transfer System API
   description: |
     Multi-service PHP/Symfony fund transfer platform.
-    All endpoints are accessible through NGINX on port 80.
+    All endpoints are accessible through NGINX on port 8000.
     Each service is routed by path prefix.
   version: "1.0.0"
   contact:
     name: Fund Transfer System
 
 servers:
-  - url: http://localhost
-    description: Local Docker environment (via NGINX)
+  - url: http://localhost:8000
+    description: Local Docker environment (via NGINX on port 8000)
 
 tags:
   - name: Health
@@ -33,6 +33,29 @@ security:
 paths:
 
   # ── Auth endpoints ────────────────────────────────────────────────────────
+
+  /user/logout:
+    post:
+      tags: [Auth]
+      summary: Logout and revoke the current JWT
+      description: |
+        Blacklists the current token's JTI in Redis. The API Gateway will
+        reject any subsequent request using this token, even if it has not
+        yet expired. The token TTL is preserved — Redis auto-expires the
+        blacklist entry when the token would have expired anyway.
+      responses:
+        "200":
+          description: Logged out successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Logged out successfully.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
 
   /user/register:
     post:

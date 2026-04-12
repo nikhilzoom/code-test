@@ -1,0 +1,5 @@
+framework:
+    cache:
+        default_redis_provider: 'redis://%env(REDIS_HOST)%:6379'
+        app: cache.adapter.redis
+        system: cache.adapter.redis

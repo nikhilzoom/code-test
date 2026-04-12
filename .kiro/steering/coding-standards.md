@@ -27,3 +27,11 @@ These standards apply to all sessions and all features in this project.
   - Error/exception scenarios
 - Repository and service classes must be tested with mocked dependencies.
 - Minimum coverage expectation: all public methods must have at least one test.
+
+## 4. Change Management
+
+- **Existing functionality changes**: If a change is required in existing working functionality, first show the proposed changes to the user for review. Only apply the changes to the respective file(s) after the user has verified and approved them.
+
+- **Sub-feature threshold**: If a required change covers more than 5% of a feature (in terms of files touched, logic altered, or scope), treat it as a sub-feature. Do planning first — define tasks and get approval — then execute the tasks sequentially.
+
+- **README updates**: After any change, check whether the README needs to be updated to reflect the new behaviour, configuration, endpoints, or architecture. If so, update it as part of the same change.

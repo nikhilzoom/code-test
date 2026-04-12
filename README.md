@@ -124,6 +124,104 @@ Health endpoints are public — no token required.
 
 ---
 
+## Redis
+
+Redis runs on port `6379` inside the Docker network and is used for two purposes:
+
+### 1. Symfony Cache backend
+
+All five services use Redis as their `app` and `system` cache pool backend instead of the filesystem. This means cache survives container restarts and is shared across replicas.
+
+### 2. JWT Token Blacklisting
+
+When a user logs out (`POST /user/logout`), the token's unique ID (`jti` claim) is stored in Redis with a TTL equal to the token's remaining lifetime. The API Gateway and User Service check this blacklist on every protected request and reject blacklisted tokens with `401 Token has been revoked`.
+
+Key pattern: `jwt_blacklist:<jti>`
+
+### 3. Per-user Rate Limiting (API Gateway)
+
+The API Gateway uses a Redis sliding window counter to enforce per-user rate limits on authenticated requests. Each request atomically increments a sorted set scoped to `rate_limit:user:<id>:<service>` and expires entries outside the 60-second window.
+
+Key pattern: `rate_limit:user:<userId>:<service>` or `rate_limit:ip:<ip>:<service>`
+
+### Inspecting Redis
+
+Open a Redis CLI session inside the container:
+
+```bash
+docker compose exec redis redis-cli
+```
+
+### Useful Redis commands
+
+```bash
+# List all keys
+KEYS *
+
+# List only blacklisted token keys
+KEYS jwt_blacklist:*
+
+# List only rate limit keys
+KEYS rate_limit:*
+
+# Check if a specific token JTI is blacklisted
+EXISTS jwt_blacklist:<jti>
+
+# See the TTL remaining on a blacklisted token (seconds)
+TTL jwt_blacklist:<jti>
+
+# Inspect a rate limit bucket (sorted set of request timestamps)
+ZRANGE rate_limit:user:1:user 0 -1 WITHSCORES
+
+# Count requests in a rate limit bucket
+ZCARD rate_limit:user:1:user
+
+# See all keys with their TTLs
+# (run from redis-cli)
+for key in $(redis-cli KEYS '*'); do echo "$key → TTL: $(redis-cli TTL $key)"; done
+
+# Flush all Redis data (clears cache, blacklist, and rate limits)
+FLUSHALL
+
+# Flush only the current database
+FLUSHDB
+
+# Get Redis server info and memory usage
+INFO memory
+
+# Monitor all Redis commands in real time
+MONITOR
+```
+
+### RedisInsight (optional GUI)
+
+To get a visual Redis browser, add this to `docker-compose.yml` under `services:`:
+
+```yaml
+  redisinsight:
+    image: redis/redisinsight:latest
+    ports:
+      - "5540:5540"
+    networks:
+      - app-network
+```
+
+Then run:
+
+```bash
+docker compose up -d redisinsight
+```
+
+Open http://localhost:5540, click **Add Redis Database**, and enter:
+
+| Field    | Value   |
+|----------|---------|
+| Host     | `redis` |
+| Port     | `6379`  |
+| Name     | any     |
+
+---
+
 ## Authentication
 
 All endpoints except health checks, `/user/register`, and `/user/login` require a valid JWT in the `Authorization` header.
@@ -253,6 +351,18 @@ curl http://localhost:8000/ledger/transaction/1 \
 
 ---
 
+## Seeding Data
+
+Seed the users table with sample users:
+
+```bash
+docker compose exec user-service php bin/console app:seed:users
+```
+
+The fixture file is at `services/user-service/src/DataFixtures/users.json`. Edit it to add or change seed users before running the command. Already-existing emails are skipped automatically, so the command is safe to run multiple times.
+
+---
+
 ## Running Tests
 
 Run PHPUnit for a specific service:
@@ -336,7 +446,7 @@ Client (HTTP :8000)
 
 Shared infrastructure (internal Docker network):
   MySQL   :3306  — one database per service
-  Redis   :6379  — shared cache/session store
+  Redis   :6379  — Symfony cache backend + JWT blacklist + rate limit counters
   MailHog :1025  — SMTP trap (web UI at :8025)
 ```
 
