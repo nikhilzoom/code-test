@@ -120,12 +120,20 @@ class AccountService
      * @param string $amount The amount to subtract as a decimal string.
      *
      * @throws NotFoundException When no account exists with the given id.
+     * @throws \RuntimeException When the account balance is insufficient to cover the debit amount.
      *
      * @return Account The updated Account entity with the new balance.
      */
     public function debit(int $id, string $amount): Account
     {
-        $account    = $this->getAccountById($id);
+        $account = $this->getAccountById($id);
+
+        if (((float) $account->getBalance()) < ((float) $amount)) {
+            throw new \RuntimeException(
+                sprintf('Insufficient balance. Available: %s, Required: %s.', $account->getBalance(), $amount)
+            );
+        }
+
         $newBalance = (string) (((float) $account->getBalance()) - ((float) $amount));
         $account->setBalance($newBalance);
         $this->accountRepository->save($account);

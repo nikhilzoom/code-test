@@ -56,6 +56,9 @@ class TransactionController extends AbstractController
      *                   "amount": "100.00", "currency": "USD", "status": "completed", "createdAt": "..."}
      *
      * Error response : HTTP 400 {"error": "Invalid JSON body.", "code": 400}
+     *                  HTTP 400 {"error": "Source and destination accounts must not be the same.", "code": 400}
+     *                  HTTP 400 {"error": "Destination account with id N not found.", "code": 400}
+     *                  HTTP 400 {"error": "Insufficient balance. Available: X, Required: Y.", "code": 400}
      *                  HTTP 500 {"error": "...", "code": 500}
      *
      * @Route("/transaction", name="transaction_initiate", methods={"POST"})
@@ -85,6 +88,8 @@ class TransactionController extends AbstractController
                 'status'               => $transaction->getStatus(),
                 'createdAt'            => $transaction->getCreatedAt()->format(\DateTimeInterface::ATOM),
             ], 201);
+        } catch (\InvalidArgumentException $e) {
+            return new JsonResponse(['error' => $e->getMessage(), 'code' => 400], 400);
         } catch (\Throwable $e) {
             return new JsonResponse(['error' => $e->getMessage(), 'code' => 500], 500);
         }

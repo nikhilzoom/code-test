@@ -141,9 +141,13 @@ class TransactionServiceTest extends TestCase
             ->with($transaction);
 
         $responseMock = $this->createMock(ResponseInterface::class);
+        $responseMock->method('getStatusCode')->willReturn(200);
+        $responseMock->method('getContent')->willReturn(
+            json_encode(['id' => 1, 'balance' => '1000.00', 'currency' => 'USD'])
+        );
 
         $this->httpClientMock
-            ->expects($this->exactly(4))
+            ->expects($this->exactly(6))
             ->method('request')
             ->willReturn($responseMock);
 
@@ -180,10 +184,21 @@ class TransactionServiceTest extends TestCase
             ->method('save')
             ->with($transaction);
 
+        $preflightResponse = $this->createMock(ResponseInterface::class);
+        $preflightResponse->method('getStatusCode')->willReturn(200);
+        $preflightResponse->method('getContent')->willReturn(
+            json_encode(['id' => 1, 'balance' => '1000.00', 'currency' => 'USD'])
+        );
+
         $this->httpClientMock
             ->expects($this->atLeastOnce())
             ->method('request')
-            ->willThrowException(new \RuntimeException('Connection refused'));
+            ->willReturnCallback(function (string $method, string $url) use ($preflightResponse): ResponseInterface {
+                if ($method === 'GET') {
+                    return $preflightResponse;
+                }
+                throw new \RuntimeException('Connection refused');
+            });
 
         $this->loggerMock
             ->expects($this->once())
@@ -197,6 +212,102 @@ class TransactionServiceTest extends TestCase
         } finally {
             $this->assertSame('failed', $transaction->getStatus());
         }
+    }
+
+    /**
+     * Test that initiateTransfer throws InvalidArgumentException when the destination account
+     * does not exist (account service returns HTTP 404).
+     *
+     * @return void
+     */
+    public function testInitiateTransferThrowsWhenReceiverAccountNotFound(): void
+    {
+        $data = [
+            'sourceAccountId'      => 1,
+            'destinationAccountId' => 99,
+            'amount'               => '100.00',
+            'currency'             => 'USD',
+        ];
+
+        $notFoundResponse = $this->createMock(ResponseInterface::class);
+        $notFoundResponse->method('getStatusCode')->willReturn(404);
+
+        $this->httpClientMock
+            ->expects($this->once())
+            ->method('request')
+            ->with('GET', 'http://nginx/account/99')
+            ->willReturn($notFoundResponse);
+
+        $this->factoryMock->expects($this->never())->method('create');
+        $this->repositoryMock->expects($this->never())->method('save');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Destination account with id 99 not found.');
+
+        $this->service->initiateTransfer($data);
+    }
+
+    /**
+     * Test that initiateTransfer throws InvalidArgumentException when the source account
+     * has insufficient balance to cover the transfer amount.
+     *
+     * @return void
+     */
+    public function testInitiateTransferThrowsWhenInsufficientBalance(): void
+    {
+        $data = [
+            'sourceAccountId'      => 1,
+            'destinationAccountId' => 2,
+            'amount'               => '500.00',
+            'currency'             => 'USD',
+        ];
+
+        $receiverResponse = $this->createMock(ResponseInterface::class);
+        $receiverResponse->method('getStatusCode')->willReturn(200);
+
+        $senderResponse = $this->createMock(ResponseInterface::class);
+        $senderResponse->method('getStatusCode')->willReturn(200);
+        $senderResponse->method('getContent')->willReturn(
+            json_encode(['id' => 1, 'balance' => '100.00', 'currency' => 'USD'])
+        );
+
+        $this->httpClientMock
+            ->expects($this->exactly(2))
+            ->method('request')
+            ->willReturnOnConsecutiveCalls($receiverResponse, $senderResponse);
+
+        $this->factoryMock->expects($this->never())->method('create');
+        $this->repositoryMock->expects($this->never())->method('save');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Insufficient balance. Available: 100.00, Required: 500.00.');
+
+        $this->service->initiateTransfer($data);
+    }
+
+    /**
+     * Test that initiateTransfer throws InvalidArgumentException when source and destination
+     * account IDs are the same, without creating any transaction.
+     *
+     * @return void
+     */
+    public function testInitiateTransferThrowsWhenSameAccount(): void
+    {
+        $data = [
+            'sourceAccountId'      => 5,
+            'destinationAccountId' => 5,
+            'amount'               => '100.00',
+            'currency'             => 'USD',
+        ];
+
+        $this->factoryMock->expects($this->never())->method('create');
+        $this->repositoryMock->expects($this->never())->method('save');
+        $this->httpClientMock->expects($this->never())->method('request');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Source and destination accounts must not be the same.');
+
+        $this->service->initiateTransfer($data);
     }
 
     /**

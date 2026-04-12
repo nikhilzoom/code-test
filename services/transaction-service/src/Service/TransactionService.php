@@ -93,20 +93,49 @@ class TransactionService
      *
      * @param array<string, mixed> $data Associative array containing transfer data.
      *
+     * @throws \InvalidArgumentException When sourceAccountId and destinationAccountId are the same.
+     * @throws \InvalidArgumentException When the destination account does not exist.
+     * @throws \InvalidArgumentException When the source account has insufficient balance.
      * @throws \Throwable When any inter-service call fails; the transaction is marked failed before throwing.
      *
      * @return Transaction The persisted Transaction entity with status `completed` or `failed`.
      */
     public function initiateTransfer(array $data): Transaction
     {
+        if ((int) $data['sourceAccountId'] === (int) $data['destinationAccountId']) {
+            throw new \InvalidArgumentException('Source and destination accounts must not be the same.');
+        }
+
+        $sourceId      = (int) $data['sourceAccountId'];
+        $destinationId = (int) $data['destinationAccountId'];
+        $amount        = (string) $data['amount'];
+
+        // Validate receiver account exists.
+        $receiverResponse = $this->httpClient->request('GET', sprintf('http://nginx/account/%d', $destinationId));
+        if ($receiverResponse->getStatusCode() === 404) {
+            throw new \InvalidArgumentException(
+                sprintf('Destination account with id %d not found.', $destinationId)
+            );
+        }
+
+        // Validate sender has sufficient balance.
+        $senderResponse = $this->httpClient->request('GET', sprintf('http://nginx/account/%d', $sourceId));
+        $senderData     = json_decode($senderResponse->getContent(), true);
+        if (((float) ($senderData['balance'] ?? 0)) < ((float) $amount)) {
+            throw new \InvalidArgumentException(
+                sprintf(
+                    'Insufficient balance. Available: %s, Required: %s.',
+                    $senderData['balance'] ?? '0',
+                    $amount
+                )
+            );
+        }
+
         /** @var Transaction $transaction */
         $transaction = $this->transactionFactory->create(array_merge($data, ['status' => 'pending']));
         $this->transactionRepository->save($transaction);
 
         try {
-            $sourceId      = $transaction->getSourceAccountId();
-            $destinationId = $transaction->getDestinationAccountId();
-            $amount        = $transaction->getAmount();
             $currency      = $transaction->getCurrency();
             $transactionId = $transaction->getId();
 
