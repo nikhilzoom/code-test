@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service;
 
+use App\DTO\LedgerEntryDTO;
 use App\Entity\LedgerEntry;
 use App\Factory\LedgerEntryFactory;
 use App\Repository\LedgerEntryRepositoryInterface;
@@ -63,13 +64,8 @@ class LedgerServiceTest extends TestCase
      *
      * @return LedgerEntry A populated LedgerEntry entity.
      */
-    private function buildEntry(
-        int $id,
-        int $transactionId,
-        int $accountId,
-        string $entryType,
-        string $amount
-    ): LedgerEntry {
+    private function buildEntry(int $id, int $transactionId, int $accountId, string $entryType, string $amount): LedgerEntry
+    {
         $entry = new LedgerEntry();
         $entry->setTransactionId($transactionId);
         $entry->setAccountId($accountId);
@@ -85,27 +81,39 @@ class LedgerServiceTest extends TestCase
     }
 
     /**
+     * Build a LedgerEntryDTO with preset values.
+     *
+     * @param int    $transactionId
+     * @param int    $accountId
+     * @param string $entryType
+     * @param string $amount
+     *
+     * @return LedgerEntryDTO
+     */
+    private function buildDto(int $transactionId, int $accountId, string $entryType, string $amount): LedgerEntryDTO
+    {
+        return new LedgerEntryDTO([
+            'transactionId' => $transactionId,
+            'accountId'     => $accountId,
+            'entryType'     => $entryType,
+            'amount'        => $amount,
+        ]);
+    }
+
+    /**
      * Test that recordEntry delegates to the factory and repository, then returns the entity.
      *
      * @return void
      */
     public function testRecordEntryHappyPath(): void
     {
-        $data  = ['transactionId' => 1, 'accountId' => 2, 'entryType' => 'debit', 'amount' => '100.00'];
+        $dto   = $this->buildDto(1, 2, 'debit', '100.00');
         $entry = $this->buildEntry(1, 1, 2, 'debit', '100.00');
 
-        $this->factoryMock
-            ->expects($this->once())
-            ->method('create')
-            ->with($data)
-            ->willReturn($entry);
+        $this->factoryMock->expects($this->once())->method('create')->with($dto)->willReturn($entry);
+        $this->repositoryMock->expects($this->once())->method('save')->with($entry);
 
-        $this->repositoryMock
-            ->expects($this->once())
-            ->method('save')
-            ->with($entry);
-
-        $result = $this->service->recordEntry($data);
+        $result = $this->service->recordEntry($dto);
 
         $this->assertSame($entry, $result);
         $this->assertSame(1, $result->getTransactionId());
@@ -124,11 +132,7 @@ class LedgerServiceTest extends TestCase
         $entry1 = $this->buildEntry(1, 1, 2, 'debit', '100.00');
         $entry2 = $this->buildEntry(2, 2, 2, 'credit', '50.00');
 
-        $this->repositoryMock
-            ->expects($this->once())
-            ->method('findByAccountId')
-            ->with(2)
-            ->willReturn([$entry1, $entry2]);
+        $this->repositoryMock->expects($this->once())->method('findByAccountId')->with(2)->willReturn([$entry1, $entry2]);
 
         $result = $this->service->getEntriesByAccount(2);
 
@@ -144,15 +148,9 @@ class LedgerServiceTest extends TestCase
      */
     public function testGetEntriesByAccountReturnsEmpty(): void
     {
-        $this->repositoryMock
-            ->expects($this->once())
-            ->method('findByAccountId')
-            ->with(99)
-            ->willReturn([]);
+        $this->repositoryMock->expects($this->once())->method('findByAccountId')->with(99)->willReturn([]);
 
-        $result = $this->service->getEntriesByAccount(99);
-
-        $this->assertSame([], $result);
+        $this->assertSame([], $this->service->getEntriesByAccount(99));
     }
 
     /**
@@ -165,11 +163,7 @@ class LedgerServiceTest extends TestCase
         $entry1 = $this->buildEntry(1, 5, 2, 'debit', '200.00');
         $entry2 = $this->buildEntry(2, 5, 3, 'credit', '200.00');
 
-        $this->repositoryMock
-            ->expects($this->once())
-            ->method('findByTransactionId')
-            ->with(5)
-            ->willReturn([$entry1, $entry2]);
+        $this->repositoryMock->expects($this->once())->method('findByTransactionId')->with(5)->willReturn([$entry1, $entry2]);
 
         $result = $this->service->getEntriesByTransaction(5);
 
@@ -185,14 +179,8 @@ class LedgerServiceTest extends TestCase
      */
     public function testGetEntriesByTransactionReturnsEmpty(): void
     {
-        $this->repositoryMock
-            ->expects($this->once())
-            ->method('findByTransactionId')
-            ->with(99)
-            ->willReturn([]);
+        $this->repositoryMock->expects($this->once())->method('findByTransactionId')->with(99)->willReturn([]);
 
-        $result = $this->service->getEntriesByTransaction(99);
-
-        $this->assertSame([], $result);
+        $this->assertSame([], $this->service->getEntriesByTransaction(99));
     }
 }

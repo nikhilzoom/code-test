@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service;
 
+use App\DTO\LedgerEntryDTO;
 use App\Entity\LedgerEntry;
 use App\Factory\LedgerEntryFactory;
 use App\Repository\LedgerEntryRepositoryInterface;
@@ -48,19 +49,18 @@ class LedgerService
     }
 
     /**
-     * Record a new ledger entry from the provided data and persist it.
+     * Record a new ledger entry from the provided DTO and persist it.
      *
      * Delegates entity construction to {@see LedgerEntryFactory::create()} and
      * persists the result via the repository.
      *
-     * @param array<string, mixed> $data Associative array with keys `transactionId`, `accountId`, `entryType`, and `amount`.
+     * @param LedgerEntryDTO $dto Validated ledger entry data.
      *
      * @return LedgerEntry The newly created and persisted LedgerEntry entity.
      */
-    public function recordEntry(array $data): LedgerEntry
+    public function recordEntry(LedgerEntryDTO $dto): LedgerEntry
     {
-        /** @var LedgerEntry $entry */
-        $entry = $this->ledgerEntryFactory->create($data);
+        $entry = $this->ledgerEntryFactory->create($dto);
         $this->ledgerEntryRepository->save($entry);
 
         return $entry;
