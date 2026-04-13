@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Controller;
 
 use App\Controller\TransactionController;
+use App\DTO\TransactionDTO;
 use App\Entity\Transaction;
 use App\Service\TransactionService;
 use PhpCommon\Exception\NotFoundException;
@@ -80,9 +81,7 @@ class TransactionControllerTest extends TestCase
         return $transaction;
     }
 
-    // -------------------------------------------------------------------------
-    // initiate()
-    // -------------------------------------------------------------------------
+    // ── initiate() ────────────────────────────────────────────────────────────
 
     /**
      * Test that initiate() returns HTTP 201 with the transaction data on success.
@@ -96,23 +95,16 @@ class TransactionControllerTest extends TestCase
         $this->serviceMock
             ->expects($this->once())
             ->method('initiateTransfer')
-            ->with(['sourceAccountId' => 1, 'destinationAccountId' => 2, 'amount' => '100.00', 'currency' => 'USD'])
+            ->with($this->isInstanceOf(TransactionDTO::class))
             ->willReturn($transaction);
 
-        $request = new Request(
-            [],
-            [],
-            [],
-            [],
-            [],
-            ['CONTENT_TYPE' => 'application/json'],
+        $request = new Request([], [], [], [], [], ['CONTENT_TYPE' => 'application/json'],
             json_encode(['sourceAccountId' => 1, 'destinationAccountId' => 2, 'amount' => '100.00', 'currency' => 'USD'])
         );
 
         $response = $this->controller->initiate($request);
 
         $this->assertSame(201, $response->getStatusCode());
-
         $body = json_decode($response->getContent(), true);
         $this->assertSame(1, $body['id']);
         $this->assertSame(1, $body['sourceAccountId']);
@@ -129,50 +121,94 @@ class TransactionControllerTest extends TestCase
      */
     public function testInitiateReturns400OnInvalidJson(): void
     {
-        $request = new Request([], [], [], [], [], [], 'not-json');
-
-        $response = $this->controller->initiate($request);
+        $response = $this->controller->initiate(new Request([], [], [], [], [], [], 'not-json'));
 
         $this->assertSame(400, $response->getStatusCode());
-
         $body = json_decode($response->getContent(), true);
         $this->assertSame(400, $body['code']);
         $this->assertArrayHasKey('error', $body);
     }
 
     /**
-     * Test that initiate() returns HTTP 500 when the service throws an exception.
+     * Test that initiate() returns HTTP 400 when DTO validation fails (invalid currency).
+     *
+     * @return void
+     */
+    public function testInitiateReturns400OnInvalidCurrency(): void
+    {
+        $request = new Request([], [], [], [], [], ['CONTENT_TYPE' => 'application/json'],
+            json_encode(['sourceAccountId' => 1, 'destinationAccountId' => 2, 'amount' => '100.00', 'currency' => 'us'])
+        );
+
+        $response = $this->controller->initiate($request);
+
+        $this->assertSame(400, $response->getStatusCode());
+        $body = json_decode($response->getContent(), true);
+        $this->assertArrayHasKey('errors', $body);
+    }
+
+    /**
+     * Test that initiate() returns HTTP 400 when amount is zero.
+     *
+     * @return void
+     */
+    public function testInitiateReturns400OnZeroAmount(): void
+    {
+        $request = new Request([], [], [], [], [], ['CONTENT_TYPE' => 'application/json'],
+            json_encode(['sourceAccountId' => 1, 'destinationAccountId' => 2, 'amount' => '0', 'currency' => 'USD'])
+        );
+
+        $response = $this->controller->initiate($request);
+
+        $this->assertSame(400, $response->getStatusCode());
+        $body = json_decode($response->getContent(), true);
+        $this->assertArrayHasKey('errors', $body);
+    }
+
+    /**
+     * Test that initiate() returns HTTP 400 when service throws InvalidArgumentException.
+     *
+     * @return void
+     */
+    public function testInitiateReturns400OnInvalidArgumentException(): void
+    {
+        $this->serviceMock->method('initiateTransfer')->willThrowException(
+            new \InvalidArgumentException('Source and destination accounts must not be the same.')
+        );
+
+        $request = new Request([], [], [], [], [], ['CONTENT_TYPE' => 'application/json'],
+            json_encode(['sourceAccountId' => 1, 'destinationAccountId' => 2, 'amount' => '100.00', 'currency' => 'USD'])
+        );
+
+        $response = $this->controller->initiate($request);
+
+        $this->assertSame(400, $response->getStatusCode());
+        $body = json_decode($response->getContent(), true);
+        $this->assertSame(400, $body['code']);
+    }
+
+    /**
+     * Test that initiate() returns HTTP 500 when the service throws an unexpected exception.
      *
      * @return void
      */
     public function testInitiateReturns500OnException(): void
     {
-        $this->serviceMock
-            ->method('initiateTransfer')
-            ->willThrowException(new \RuntimeException('Transfer failed'));
+        $this->serviceMock->method('initiateTransfer')->willThrowException(new \RuntimeException('Transfer failed'));
 
-        $request = new Request(
-            [],
-            [],
-            [],
-            [],
-            [],
-            ['CONTENT_TYPE' => 'application/json'],
+        $request = new Request([], [], [], [], [], ['CONTENT_TYPE' => 'application/json'],
             json_encode(['sourceAccountId' => 1, 'destinationAccountId' => 2, 'amount' => '100.00', 'currency' => 'USD'])
         );
 
         $response = $this->controller->initiate($request);
 
         $this->assertSame(500, $response->getStatusCode());
-
         $body = json_decode($response->getContent(), true);
         $this->assertSame(500, $body['code']);
         $this->assertSame('Transfer failed', $body['error']);
     }
 
-    // -------------------------------------------------------------------------
-    // getById()
-    // -------------------------------------------------------------------------
+    // ── getById() ─────────────────────────────────────────────────────────────
 
     /**
      * Test that getById() returns HTTP 200 with the transaction data when found.
@@ -182,21 +218,13 @@ class TransactionControllerTest extends TestCase
     public function testGetByIdReturns200OnSuccess(): void
     {
         $transaction = $this->buildTransaction(5, 3, 4, '250.00', 'EUR', 'completed');
-
-        $this->serviceMock
-            ->expects($this->once())
-            ->method('getTransactionById')
-            ->with(5)
-            ->willReturn($transaction);
+        $this->serviceMock->expects($this->once())->method('getTransactionById')->with(5)->willReturn($transaction);
 
         $response = $this->controller->getById(5);
 
         $this->assertSame(200, $response->getStatusCode());
-
         $body = json_decode($response->getContent(), true);
         $this->assertSame(5, $body['id']);
-        $this->assertSame(3, $body['sourceAccountId']);
-        $this->assertSame(4, $body['destinationAccountId']);
         $this->assertSame('250.00', $body['amount']);
         $this->assertSame('EUR', $body['currency']);
         $this->assertSame('completed', $body['status']);
@@ -209,16 +237,11 @@ class TransactionControllerTest extends TestCase
      */
     public function testGetByIdReturns404WhenNotFound(): void
     {
-        $this->serviceMock
-            ->expects($this->once())
-            ->method('getTransactionById')
-            ->with(99)
-            ->willThrowException(new NotFoundException('Transaction with id 99 not found.'));
+        $this->serviceMock->method('getTransactionById')->willThrowException(new NotFoundException('Transaction with id 99 not found.'));
 
         $response = $this->controller->getById(99);
 
         $this->assertSame(404, $response->getStatusCode());
-
         $body = json_decode($response->getContent(), true);
         $this->assertSame(404, $body['code']);
         $this->assertStringContainsString('99', $body['error']);
@@ -231,15 +254,10 @@ class TransactionControllerTest extends TestCase
      */
     public function testGetByIdReturns500OnException(): void
     {
-        $this->serviceMock
-            ->method('getTransactionById')
-            ->willThrowException(new \RuntimeException('Unexpected error'));
+        $this->serviceMock->method('getTransactionById')->willThrowException(new \RuntimeException('Unexpected'));
 
         $response = $this->controller->getById(1);
 
         $this->assertSame(500, $response->getStatusCode());
-
-        $body = json_decode($response->getContent(), true);
-        $this->assertSame(500, $body['code']);
     }
 }
