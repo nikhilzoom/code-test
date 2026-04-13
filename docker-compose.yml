@@ -18,6 +18,11 @@ services:
     build:
       context: .
       dockerfile: services/api-gateway/Dockerfile
+    volumes:
+      - ./services/api-gateway/src:/var/www/html/src
+      - ./services/api-gateway/config:/var/www/html/config
+      - ./shared/php-common:/shared/php-common
+      - ./infrastructure/docker/php-dev.ini:/usr/local/etc/php/conf.d/php-dev.ini
     environment:
       APP_ENV: dev
       APP_SECRET: a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6
@@ -29,6 +34,11 @@ services:
     build:
       context: .
       dockerfile: services/user-service/Dockerfile
+    volumes:
+      - ./services/user-service/src:/var/www/html/src
+      - ./services/user-service/config:/var/www/html/config
+      - ./shared/php-common:/shared/php-common
+      - ./infrastructure/docker/php-dev.ini:/usr/local/etc/php/conf.d/php-dev.ini
     environment:
       APP_ENV: dev
       APP_SECRET: b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7
@@ -44,6 +54,11 @@ services:
     build:
       context: .
       dockerfile: services/account-service/Dockerfile
+    volumes:
+      - ./services/account-service/src:/var/www/html/src
+      - ./services/account-service/config:/var/www/html/config
+      - ./shared/php-common:/shared/php-common
+      - ./infrastructure/docker/php-dev.ini:/usr/local/etc/php/conf.d/php-dev.ini
     environment:
       APP_ENV: dev
       APP_SECRET: c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8
@@ -61,6 +76,11 @@ services:
     build:
       context: .
       dockerfile: services/transaction-service/Dockerfile
+    volumes:
+      - ./services/transaction-service/src:/var/www/html/src
+      - ./services/transaction-service/config:/var/www/html/config
+      - ./shared/php-common:/shared/php-common
+      - ./infrastructure/docker/php-dev.ini:/usr/local/etc/php/conf.d/php-dev.ini
     environment:
       APP_ENV: dev
       APP_SECRET: d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9
@@ -75,6 +95,11 @@ services:
     build:
       context: .
       dockerfile: services/ledger-service/Dockerfile
+    volumes:
+      - ./services/ledger-service/src:/var/www/html/src
+      - ./services/ledger-service/config:/var/www/html/config
+      - ./shared/php-common:/shared/php-common
+      - ./infrastructure/docker/php-dev.ini:/usr/local/etc/php/conf.d/php-dev.ini
     environment:
       APP_ENV: dev
       APP_SECRET: e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0
@@ -111,8 +136,7 @@ services:
   mailhog:
     image: mailhog/mailhog:latest
     ports:
-      - "1025:1025"
-      - "8025:8025"
+      - "8026:8025"
     networks:
       - app-network
 
