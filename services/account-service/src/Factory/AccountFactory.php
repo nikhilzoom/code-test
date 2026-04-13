@@ -4,40 +4,32 @@ declare(strict_types=1);
 
 namespace App\Factory;
 
+use App\DTO\AccountDTO;
 use App\Entity\Account;
-use PhpCommon\Factory\FactoryInterface;
 
 /**
- * Factory for creating {@see Account} entity instances from raw data arrays.
+ * Factory for creating {@see Account} entity instances from {@see AccountDTO}.
  *
  * Centralises all Account construction logic so that controllers and services
- * never instantiate Account objects directly. Implements the shared
- * {@see FactoryInterface} contract.
+ * never instantiate Account objects directly.
  *
  * @package App\Factory
  */
-class AccountFactory implements FactoryInterface
+class AccountFactory
 {
     /**
-     * Create and return a new Account entity populated from the provided data array.
+     * Create and return a new Account entity populated from the provided DTO.
      *
-     * Expected keys in $data:
-     * - `userId`   (int)    The ID of the user who owns the account.
-     * - `balance`  (string) The initial balance as a decimal string.
-     * - `currency` (string) The ISO 4217 currency code (3 characters).
-     *
-     * The `createdAt` timestamp is set automatically to the current UTC time.
-     *
-     * @param array<string, mixed> $data Associative array containing `userId`, `balance`, and `currency`.
+     * @param AccountDTO $dto Validated account creation data.
      *
      * @return Account The newly created and populated Account entity.
      */
-    public function create(array $data): object
+    public function create(AccountDTO $dto): Account
     {
         $account = new Account();
-        $account->setUserId((int) $data['userId']);
-        $account->setBalance((string) $data['balance']);
-        $account->setCurrency((string) $data['currency']);
+        $account->setUserId($dto->userId);
+        $account->setBalance($dto->balance);
+        $account->setCurrency($dto->currency);
         $account->setCreatedAt(new \DateTimeImmutable());
 
         return $account;

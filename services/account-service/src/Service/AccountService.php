@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service;
 
+use App\DTO\AccountDTO;
 use App\Entity\Account;
 use App\Factory\AccountFactory;
 use App\Repository\AccountRepositoryInterface;
@@ -71,19 +72,18 @@ class AccountService
     }
 
     /**
-     * Create a new account from the provided data and persist it.
+     * Create a new account from the provided DTO and persist it.
      *
      * Delegates entity construction to {@see AccountFactory::create()} and
      * persists the result via the repository.
      *
-     * @param array<string, mixed> $data Associative array with keys `userId`, `balance`, and `currency`.
+     * @param AccountDTO $dto Validated account creation data.
      *
      * @return Account The newly created and persisted Account entity.
      */
-    public function createAccount(array $data): Account
+    public function createAccount(AccountDTO $dto): Account
     {
-        /** @var Account $account */
-        $account = $this->accountFactory->create($data);
+        $account = $this->accountFactory->create($dto);
         $this->accountRepository->save($account);
 
         return $account;

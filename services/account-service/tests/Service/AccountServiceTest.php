@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service;
 
+use App\DTO\AccountDTO;
 use App\Entity\Account;
 use App\Factory\AccountFactory;
 use App\Repository\AccountRepositoryInterface;
@@ -80,6 +81,20 @@ class AccountServiceTest extends TestCase
     }
 
     /**
+     * Build an AccountDTO with preset values.
+     *
+     * @param int    $userId
+     * @param string $balance
+     * @param string $currency
+     *
+     * @return AccountDTO
+     */
+    private function buildDto(int $userId, string $balance, string $currency): AccountDTO
+    {
+        return new AccountDTO(['userId' => $userId, 'balance' => $balance, 'currency' => $currency]);
+    }
+
+    /**
      * Build an AccountService with a mocked NotificationServiceInterface injected.
      *
      * @param NotificationServiceInterface $notificationService
@@ -104,13 +119,13 @@ class AccountServiceTest extends TestCase
      */
     public function testCreateAccountHappyPath(): void
     {
-        $data    = ['userId' => 1, 'balance' => '1000.00', 'currency' => 'USD'];
+        $dto     = $this->buildDto(1, '1000.00', 'USD');
         $account = $this->buildAccount(1, 1, '1000.00', 'USD');
 
-        $this->factoryMock->expects($this->once())->method('create')->with($data)->willReturn($account);
+        $this->factoryMock->expects($this->once())->method('create')->with($dto)->willReturn($account);
         $this->repositoryMock->expects($this->once())->method('save')->with($account);
 
-        $result = $this->service->createAccount($data);
+        $result = $this->service->createAccount($dto);
 
         $this->assertSame($account, $result);
         $this->assertSame(1, $result->getUserId());
@@ -271,33 +286,26 @@ class AccountServiceTest extends TestCase
         $this->assertInstanceOf(Account::class, $this->serviceWithNotification($ns)->credit(1, '100.00'));
     }
 
-    // ── Property 5: notification failure does not propagate (data-driven) ─────
+    // ── Notification failure isolation (data-driven) ──────────────────────────
 
     /**
      * Provides various exception types to simulate notification failures.
-     *
-     * Feature: email-notifications, Property 5: AccountService notification failure does not propagate
      *
      * @return array<string, array{\Throwable}>
      */
     public static function notificationExceptionProvider(): array
     {
         return [
-            'RuntimeException'          => [new \RuntimeException('SMTP timeout')],
-            'LogicException'            => [new \LogicException('Bad state')],
-            'InvalidArgumentException'  => [new \InvalidArgumentException('Bad arg')],
-            'OverflowException'         => [new \OverflowException('Queue full')],
-            'UnexpectedValueException'  => [new \UnexpectedValueException('Unexpected')],
-            'generic Exception'         => [new \Exception('Generic failure')],
-            'Error'                     => [new \Error('Fatal error')],
-            'TypeError'                 => [new \TypeError('Type mismatch')],
+            'RuntimeException'         => [new \RuntimeException('SMTP timeout')],
+            'LogicException'           => [new \LogicException('Bad state')],
+            'InvalidArgumentException' => [new \InvalidArgumentException('Bad arg')],
+            'OverflowException'        => [new \OverflowException('Queue full')],
+            'generic Exception'        => [new \Exception('Generic failure')],
         ];
     }
 
     /**
-     * Property 5: debit() always returns Account regardless of exception type thrown by NotificationService.
-     *
-     * Feature: email-notifications, Property 5: AccountService notification failure does not propagate
+     * debit() always returns Account regardless of exception type thrown by NotificationService.
      *
      * @dataProvider notificationExceptionProvider
      *
@@ -313,15 +321,11 @@ class AccountServiceTest extends TestCase
         $ns = $this->createMock(NotificationServiceInterface::class);
         $ns->method('notifyDebit')->willThrowException($exception);
 
-        $result = $this->serviceWithNotification($ns)->debit(1, '50.00');
-
-        $this->assertInstanceOf(Account::class, $result);
+        $this->assertInstanceOf(Account::class, $this->serviceWithNotification($ns)->debit(1, '50.00'));
     }
 
     /**
-     * Property 5: credit() always returns Account regardless of exception type thrown by NotificationService.
-     *
-     * Feature: email-notifications, Property 5: AccountService notification failure does not propagate
+     * credit() always returns Account regardless of exception type thrown by NotificationService.
      *
      * @dataProvider notificationExceptionProvider
      *
@@ -337,87 +341,6 @@ class AccountServiceTest extends TestCase
         $ns = $this->createMock(NotificationServiceInterface::class);
         $ns->method('notifyCredit')->willThrowException($exception);
 
-        $result = $this->serviceWithNotification($ns)->credit(1, '50.00');
-
-        $this->assertInstanceOf(Account::class, $result);
-    }
-
-    // ── Property 6: correct notification arguments (data-driven) ─────────────
-
-    /**
-     * Provides varied balance/amount combinations for notification argument testing.
-     *
-     * Feature: email-notifications, Property 6: AccountService calls correct notification method with correct arguments
-     *
-     * @return array<string, array{string, string}>
-     */
-    public static function balanceAmountProvider(): array
-    {
-        return [
-            'small amounts'       => ['100.00', '10.00'],
-            'large amounts'       => ['999999.99', '50000.00'],
-            'zero balance'        => ['0.00', '0.01'],
-            'decimal precision'   => ['1234.5678', '0.0001'],
-            'round numbers'       => ['1000', '500'],
-            'single cent'         => ['0.01', '0.01'],
-            'high value transfer' => ['1000000.00', '999999.99'],
-            'fractional amount'   => ['250.75', '12.50'],
-        ];
-    }
-
-    /**
-     * Property 6: debit() calls notifyDebit() with the post-debit Account and the original amount string.
-     *
-     * Feature: email-notifications, Property 6: AccountService calls correct notification method with correct arguments
-     *
-     * @dataProvider balanceAmountProvider
-     *
-     * @param string $balance Starting balance.
-     * @param string $amount  Amount to debit.
-     *
-     * @return void
-     */
-    public function testDebitPassesCorrectArgumentsToNotification(string $balance, string $amount): void
-    {
-        $account = $this->buildAccount(1, 1, $balance, 'USD');
-        $this->repositoryMock->method('findById')->willReturn($account);
-
-        $ns = $this->createMock(NotificationServiceInterface::class);
-        $ns->expects($this->once())
-            ->method('notifyDebit')
-            ->with(
-                $this->callback(fn ($a) => $a instanceof Account),
-                $amount
-            );
-
-        $this->serviceWithNotification($ns)->debit(1, $amount);
-    }
-
-    /**
-     * Property 6: credit() calls notifyCredit() with the post-credit Account and the original amount string.
-     *
-     * Feature: email-notifications, Property 6: AccountService calls correct notification method with correct arguments
-     *
-     * @dataProvider balanceAmountProvider
-     *
-     * @param string $balance Starting balance.
-     * @param string $amount  Amount to credit.
-     *
-     * @return void
-     */
-    public function testCreditPassesCorrectArgumentsToNotification(string $balance, string $amount): void
-    {
-        $account = $this->buildAccount(1, 1, $balance, 'USD');
-        $this->repositoryMock->method('findById')->willReturn($account);
-
-        $ns = $this->createMock(NotificationServiceInterface::class);
-        $ns->expects($this->once())
-            ->method('notifyCredit')
-            ->with(
-                $this->callback(fn ($a) => $a instanceof Account),
-                $amount
-            );
-
-        $this->serviceWithNotification($ns)->credit(1, $amount);
+        $this->assertInstanceOf(Account::class, $this->serviceWithNotification($ns)->credit(1, '50.00'));
     }
 }

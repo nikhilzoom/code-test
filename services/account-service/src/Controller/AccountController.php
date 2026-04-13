@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\DTO\AccountDTO;
+use App\DTO\AmountDTO;
 use App\Service\AccountService;
 use PhpCommon\Exception\NotFoundException;
+use PhpCommon\Exception\ValidationException;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -43,7 +46,8 @@ class AccountController extends AbstractController
      * Create a new account.
      *
      * Accepts a JSON body with `userId`, `balance`, and `currency` fields,
-     * creates the account, and returns the persisted account data with HTTP 201.
+     * validates the input via {@see AccountDTO}, creates the account, and
+     * returns the persisted account data with HTTP 201.
      *
      * Request format : POST /account
      *                  Content-Type: application/json
@@ -53,6 +57,7 @@ class AccountController extends AbstractController
      *                  {"id": 1, "userId": 1, "balance": "1000.00", "currency": "USD", "createdAt": "..."}
      *
      * Error response : HTTP 400 {"error": "Invalid JSON body.", "code": 400}
+     *                  HTTP 400 {"errors": ["userId must be a positive integer."], "code": 400}
      *                  HTTP 500 {"error": "...", "code": 500}
      *
      * @Route("/account", name="account_create", methods={"POST"})
@@ -71,7 +76,14 @@ class AccountController extends AbstractController
                 return new JsonResponse(['error' => 'Invalid JSON body.', 'code' => 400], 400);
             }
 
-            $account = $this->accountService->createAccount($data);
+            $dto    = new AccountDTO($data);
+            $errors = $dto->validate();
+
+            if (!empty($errors)) {
+                return new JsonResponse(['errors' => $errors, 'code' => 400], 400);
+            }
+
+            $account = $this->accountService->createAccount($dto);
 
             return new JsonResponse([
                 'id'        => $account->getId(),
@@ -80,6 +92,8 @@ class AccountController extends AbstractController
                 'currency'  => $account->getCurrency(),
                 'createdAt' => $account->getCreatedAt()->format(\DateTimeInterface::ATOM),
             ], 201);
+        } catch (ValidationException $e) {
+            return new JsonResponse(['errors' => $e->getErrors(), 'code' => 400], 400);
         } catch (\Throwable $e) {
             return new JsonResponse(['error' => $e->getMessage(), 'code' => 500], 500);
         }
@@ -129,8 +143,8 @@ class AccountController extends AbstractController
     /**
      * Debit (subtract) an amount from an account's balance.
      *
-     * Accepts a JSON body with an `amount` field, subtracts it from the account
-     * balance, and returns the updated account data.
+     * Accepts a JSON body with an `amount` field, validates it via {@see AmountDTO},
+     * subtracts it from the account balance, and returns the updated account data.
      *
      * Request format : POST /account/{id}/debit
      *                  Content-Type: application/json
@@ -140,6 +154,7 @@ class AccountController extends AbstractController
      *                  {"id": 1, "userId": 1, "balance": "950.00", "currency": "USD", "createdAt": "..."}
      *
      * Error response : HTTP 400 {"error": "Invalid JSON body.", "code": 400}
+     *                  HTTP 400 {"errors": ["amount must be a positive numeric value."], "code": 400}
      *                  HTTP 404 {"error": "Account with id 1 not found.", "code": 404}
      *                  HTTP 500 {"error": "...", "code": 500}
      *
@@ -160,7 +175,14 @@ class AccountController extends AbstractController
                 return new JsonResponse(['error' => 'Invalid JSON body.', 'code' => 400], 400);
             }
 
-            $account = $this->accountService->debit($id, (string) $data['amount']);
+            $dto    = new AmountDTO($data);
+            $errors = $dto->validate();
+
+            if (!empty($errors)) {
+                return new JsonResponse(['errors' => $errors, 'code' => 400], 400);
+            }
+
+            $account = $this->accountService->debit($id, $dto->amount);
 
             return new JsonResponse([
                 'id'        => $account->getId(),
@@ -179,8 +201,8 @@ class AccountController extends AbstractController
     /**
      * Credit (add) an amount to an account's balance.
      *
-     * Accepts a JSON body with an `amount` field, adds it to the account
-     * balance, and returns the updated account data.
+     * Accepts a JSON body with an `amount` field, validates it via {@see AmountDTO},
+     * adds it to the account balance, and returns the updated account data.
      *
      * Request format : POST /account/{id}/credit
      *                  Content-Type: application/json
@@ -190,6 +212,7 @@ class AccountController extends AbstractController
      *                  {"id": 1, "userId": 1, "balance": "1200.00", "currency": "USD", "createdAt": "..."}
      *
      * Error response : HTTP 400 {"error": "Invalid JSON body.", "code": 400}
+     *                  HTTP 400 {"errors": ["amount must be a positive numeric value."], "code": 400}
      *                  HTTP 404 {"error": "Account with id 1 not found.", "code": 404}
      *                  HTTP 500 {"error": "...", "code": 500}
      *
@@ -210,7 +233,14 @@ class AccountController extends AbstractController
                 return new JsonResponse(['error' => 'Invalid JSON body.', 'code' => 400], 400);
             }
 
-            $account = $this->accountService->credit($id, (string) $data['amount']);
+            $dto    = new AmountDTO($data);
+            $errors = $dto->validate();
+
+            if (!empty($errors)) {
+                return new JsonResponse(['errors' => $errors, 'code' => 400], 400);
+            }
+
+            $account = $this->accountService->credit($id, $dto->amount);
 
             return new JsonResponse([
                 'id'        => $account->getId(),
