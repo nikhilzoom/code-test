@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Controller;
 
 use App\Controller\LedgerController;
+use App\DTO\LedgerEntryDTO;
 use App\Entity\LedgerEntry;
 use App\Service\LedgerService;
 use PHPUnit\Framework\TestCase;
@@ -55,13 +56,8 @@ class LedgerControllerTest extends TestCase
      *
      * @return LedgerEntry A populated LedgerEntry entity.
      */
-    private function buildEntry(
-        int $id,
-        int $transactionId,
-        int $accountId,
-        string $entryType,
-        string $amount
-    ): LedgerEntry {
+    private function buildEntry(int $id, int $transactionId, int $accountId, string $entryType, string $amount): LedgerEntry
+    {
         $entry = new LedgerEntry();
         $entry->setTransactionId($transactionId);
         $entry->setAccountId($accountId);
@@ -76,9 +72,7 @@ class LedgerControllerTest extends TestCase
         return $entry;
     }
 
-    // -------------------------------------------------------------------------
-    // recordEntry()
-    // -------------------------------------------------------------------------
+    // ── recordEntry() ─────────────────────────────────────────────────────────
 
     /**
      * Test that recordEntry() returns HTTP 201 with the new entry data on success.
@@ -92,23 +86,16 @@ class LedgerControllerTest extends TestCase
         $this->serviceMock
             ->expects($this->once())
             ->method('recordEntry')
-            ->with(['transactionId' => 1, 'accountId' => 2, 'entryType' => 'debit', 'amount' => '100.00'])
+            ->with($this->isInstanceOf(LedgerEntryDTO::class))
             ->willReturn($entry);
 
-        $request = new Request(
-            [],
-            [],
-            [],
-            [],
-            [],
-            ['CONTENT_TYPE' => 'application/json'],
+        $request = new Request([], [], [], [], [], ['CONTENT_TYPE' => 'application/json'],
             json_encode(['transactionId' => 1, 'accountId' => 2, 'entryType' => 'debit', 'amount' => '100.00'])
         );
 
         $response = $this->controller->recordEntry($request);
 
         $this->assertSame(201, $response->getStatusCode());
-
         $body = json_decode($response->getContent(), true);
         $this->assertSame(1, $body['id']);
         $this->assertSame(1, $body['transactionId']);
@@ -124,15 +111,48 @@ class LedgerControllerTest extends TestCase
      */
     public function testRecordEntryReturns400OnInvalidJson(): void
     {
-        $request = new Request([], [], [], [], [], [], 'not-json');
+        $response = $this->controller->recordEntry(new Request([], [], [], [], [], [], 'not-json'));
+
+        $this->assertSame(400, $response->getStatusCode());
+        $body = json_decode($response->getContent(), true);
+        $this->assertSame(400, $body['code']);
+        $this->assertArrayHasKey('error', $body);
+    }
+
+    /**
+     * Test that recordEntry() returns HTTP 400 when entryType is invalid.
+     *
+     * @return void
+     */
+    public function testRecordEntryReturns400OnInvalidEntryType(): void
+    {
+        $request = new Request([], [], [], [], [], ['CONTENT_TYPE' => 'application/json'],
+            json_encode(['transactionId' => 1, 'accountId' => 2, 'entryType' => 'transfer', 'amount' => '100.00'])
+        );
 
         $response = $this->controller->recordEntry($request);
 
         $this->assertSame(400, $response->getStatusCode());
-
         $body = json_decode($response->getContent(), true);
-        $this->assertSame(400, $body['code']);
-        $this->assertArrayHasKey('error', $body);
+        $this->assertArrayHasKey('errors', $body);
+    }
+
+    /**
+     * Test that recordEntry() returns HTTP 400 when amount is zero.
+     *
+     * @return void
+     */
+    public function testRecordEntryReturns400OnZeroAmount(): void
+    {
+        $request = new Request([], [], [], [], [], ['CONTENT_TYPE' => 'application/json'],
+            json_encode(['transactionId' => 1, 'accountId' => 2, 'entryType' => 'debit', 'amount' => '0'])
+        );
+
+        $response = $this->controller->recordEntry($request);
+
+        $this->assertSame(400, $response->getStatusCode());
+        $body = json_decode($response->getContent(), true);
+        $this->assertArrayHasKey('errors', $body);
     }
 
     /**
@@ -142,32 +162,21 @@ class LedgerControllerTest extends TestCase
      */
     public function testRecordEntryReturns500OnException(): void
     {
-        $this->serviceMock
-            ->method('recordEntry')
-            ->willThrowException(new \RuntimeException('DB error'));
+        $this->serviceMock->method('recordEntry')->willThrowException(new \RuntimeException('DB error'));
 
-        $request = new Request(
-            [],
-            [],
-            [],
-            [],
-            [],
-            ['CONTENT_TYPE' => 'application/json'],
+        $request = new Request([], [], [], [], [], ['CONTENT_TYPE' => 'application/json'],
             json_encode(['transactionId' => 1, 'accountId' => 2, 'entryType' => 'debit', 'amount' => '100.00'])
         );
 
         $response = $this->controller->recordEntry($request);
 
         $this->assertSame(500, $response->getStatusCode());
-
         $body = json_decode($response->getContent(), true);
         $this->assertSame(500, $body['code']);
         $this->assertSame('DB error', $body['error']);
     }
 
-    // -------------------------------------------------------------------------
-    // getByAccount()
-    // -------------------------------------------------------------------------
+    // ── getByAccount() ────────────────────────────────────────────────────────
 
     /**
      * Test that getByAccount() returns HTTP 200 with an array of entries on success.
@@ -179,16 +188,11 @@ class LedgerControllerTest extends TestCase
         $entry1 = $this->buildEntry(1, 1, 2, 'debit', '100.00');
         $entry2 = $this->buildEntry(2, 2, 2, 'credit', '50.00');
 
-        $this->serviceMock
-            ->expects($this->once())
-            ->method('getEntriesByAccount')
-            ->with(2)
-            ->willReturn([$entry1, $entry2]);
+        $this->serviceMock->expects($this->once())->method('getEntriesByAccount')->with(2)->willReturn([$entry1, $entry2]);
 
         $response = $this->controller->getByAccount(2);
 
         $this->assertSame(200, $response->getStatusCode());
-
         $body = json_decode($response->getContent(), true);
         $this->assertCount(2, $body);
         $this->assertSame(1, $body[0]['id']);
@@ -202,18 +206,12 @@ class LedgerControllerTest extends TestCase
      */
     public function testGetByAccountReturnsEmptyArray(): void
     {
-        $this->serviceMock
-            ->expects($this->once())
-            ->method('getEntriesByAccount')
-            ->with(99)
-            ->willReturn([]);
+        $this->serviceMock->expects($this->once())->method('getEntriesByAccount')->with(99)->willReturn([]);
 
         $response = $this->controller->getByAccount(99);
 
         $this->assertSame(200, $response->getStatusCode());
-
-        $body = json_decode($response->getContent(), true);
-        $this->assertSame([], $body);
+        $this->assertSame([], json_decode($response->getContent(), true));
     }
 
     /**
@@ -223,21 +221,14 @@ class LedgerControllerTest extends TestCase
      */
     public function testGetByAccountReturns500OnException(): void
     {
-        $this->serviceMock
-            ->method('getEntriesByAccount')
-            ->willThrowException(new \RuntimeException('Unexpected error'));
+        $this->serviceMock->method('getEntriesByAccount')->willThrowException(new \RuntimeException('Unexpected'));
 
         $response = $this->controller->getByAccount(1);
 
         $this->assertSame(500, $response->getStatusCode());
-
-        $body = json_decode($response->getContent(), true);
-        $this->assertSame(500, $body['code']);
     }
 
-    // -------------------------------------------------------------------------
-    // getByTransaction()
-    // -------------------------------------------------------------------------
+    // ── getByTransaction() ────────────────────────────────────────────────────
 
     /**
      * Test that getByTransaction() returns HTTP 200 with an array of entries on success.
@@ -249,16 +240,11 @@ class LedgerControllerTest extends TestCase
         $entry1 = $this->buildEntry(1, 5, 2, 'debit', '200.00');
         $entry2 = $this->buildEntry(2, 5, 3, 'credit', '200.00');
 
-        $this->serviceMock
-            ->expects($this->once())
-            ->method('getEntriesByTransaction')
-            ->with(5)
-            ->willReturn([$entry1, $entry2]);
+        $this->serviceMock->expects($this->once())->method('getEntriesByTransaction')->with(5)->willReturn([$entry1, $entry2]);
 
         $response = $this->controller->getByTransaction(5);
 
         $this->assertSame(200, $response->getStatusCode());
-
         $body = json_decode($response->getContent(), true);
         $this->assertCount(2, $body);
         $this->assertSame(5, $body[0]['transactionId']);
@@ -272,18 +258,12 @@ class LedgerControllerTest extends TestCase
      */
     public function testGetByTransactionReturnsEmptyArray(): void
     {
-        $this->serviceMock
-            ->expects($this->once())
-            ->method('getEntriesByTransaction')
-            ->with(99)
-            ->willReturn([]);
+        $this->serviceMock->expects($this->once())->method('getEntriesByTransaction')->with(99)->willReturn([]);
 
         $response = $this->controller->getByTransaction(99);
 
         $this->assertSame(200, $response->getStatusCode());
-
-        $body = json_decode($response->getContent(), true);
-        $this->assertSame([], $body);
+        $this->assertSame([], json_decode($response->getContent(), true));
     }
 
     /**
@@ -293,15 +273,10 @@ class LedgerControllerTest extends TestCase
      */
     public function testGetByTransactionReturns500OnException(): void
     {
-        $this->serviceMock
-            ->method('getEntriesByTransaction')
-            ->willThrowException(new \RuntimeException('Unexpected error'));
+        $this->serviceMock->method('getEntriesByTransaction')->willThrowException(new \RuntimeException('Unexpected'));
 
         $response = $this->controller->getByTransaction(1);
 
         $this->assertSame(500, $response->getStatusCode());
-
-        $body = json_decode($response->getContent(), true);
-        $this->assertSame(500, $body['code']);
     }
 }

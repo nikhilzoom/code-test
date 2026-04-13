@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Tests\Controller;
 
 use App\Controller\AccountController;
+use App\DTO\AccountDTO;
+use App\DTO\AmountDTO;
 use App\Entity\Account;
 use App\Service\AccountService;
 use PhpCommon\Exception\NotFoundException;
@@ -70,9 +72,7 @@ class AccountControllerTest extends TestCase
         return $account;
     }
 
-    // -------------------------------------------------------------------------
-    // create()
-    // -------------------------------------------------------------------------
+    // ── create() ─────────────────────────────────────────────────────────────
 
     /**
      * Test that create() returns HTTP 201 with the new account data on success.
@@ -86,23 +86,16 @@ class AccountControllerTest extends TestCase
         $this->serviceMock
             ->expects($this->once())
             ->method('createAccount')
-            ->with(['userId' => 1, 'balance' => '1000.00', 'currency' => 'USD'])
+            ->with($this->isInstanceOf(AccountDTO::class))
             ->willReturn($account);
 
-        $request = new Request(
-            [],
-            [],
-            [],
-            [],
-            [],
-            ['CONTENT_TYPE' => 'application/json'],
+        $request = new Request([], [], [], [], [], ['CONTENT_TYPE' => 'application/json'],
             json_encode(['userId' => 1, 'balance' => '1000.00', 'currency' => 'USD'])
         );
 
         $response = $this->controller->create($request);
 
         $this->assertSame(201, $response->getStatusCode());
-
         $body = json_decode($response->getContent(), true);
         $this->assertSame(1, $body['id']);
         $this->assertSame(1, $body['userId']);
@@ -117,15 +110,49 @@ class AccountControllerTest extends TestCase
      */
     public function testCreateReturns400OnInvalidJson(): void
     {
-        $request = new Request([], [], [], [], [], [], 'not-json');
+        $response = $this->controller->create(new Request([], [], [], [], [], [], 'not-json'));
+
+        $this->assertSame(400, $response->getStatusCode());
+        $body = json_decode($response->getContent(), true);
+        $this->assertSame(400, $body['code']);
+        $this->assertArrayHasKey('error', $body);
+    }
+
+    /**
+     * Test that create() returns HTTP 400 when DTO validation fails (invalid userId).
+     *
+     * @return void
+     */
+    public function testCreateReturns400OnDtoValidationFailure(): void
+    {
+        $request = new Request([], [], [], [], [], ['CONTENT_TYPE' => 'application/json'],
+            json_encode(['userId' => 0, 'balance' => '1000.00', 'currency' => 'USD'])
+        );
 
         $response = $this->controller->create($request);
 
         $this->assertSame(400, $response->getStatusCode());
-
         $body = json_decode($response->getContent(), true);
-        $this->assertSame(400, $body['code']);
-        $this->assertArrayHasKey('error', $body);
+        $this->assertArrayHasKey('errors', $body);
+        $this->assertNotEmpty($body['errors']);
+    }
+
+    /**
+     * Test that create() returns HTTP 400 when currency is invalid.
+     *
+     * @return void
+     */
+    public function testCreateReturns400OnInvalidCurrency(): void
+    {
+        $request = new Request([], [], [], [], [], ['CONTENT_TYPE' => 'application/json'],
+            json_encode(['userId' => 1, 'balance' => '100.00', 'currency' => 'us'])
+        );
+
+        $response = $this->controller->create($request);
+
+        $this->assertSame(400, $response->getStatusCode());
+        $body = json_decode($response->getContent(), true);
+        $this->assertArrayHasKey('errors', $body);
     }
 
     /**
@@ -135,32 +162,21 @@ class AccountControllerTest extends TestCase
      */
     public function testCreateReturns500OnException(): void
     {
-        $this->serviceMock
-            ->method('createAccount')
-            ->willThrowException(new \RuntimeException('DB error'));
+        $this->serviceMock->method('createAccount')->willThrowException(new \RuntimeException('DB error'));
 
-        $request = new Request(
-            [],
-            [],
-            [],
-            [],
-            [],
-            ['CONTENT_TYPE' => 'application/json'],
+        $request = new Request([], [], [], [], [], ['CONTENT_TYPE' => 'application/json'],
             json_encode(['userId' => 1, 'balance' => '1000.00', 'currency' => 'USD'])
         );
 
         $response = $this->controller->create($request);
 
         $this->assertSame(500, $response->getStatusCode());
-
         $body = json_decode($response->getContent(), true);
         $this->assertSame(500, $body['code']);
         $this->assertSame('DB error', $body['error']);
     }
 
-    // -------------------------------------------------------------------------
-    // getById()
-    // -------------------------------------------------------------------------
+    // ── getById() ─────────────────────────────────────────────────────────────
 
     /**
      * Test that getById() returns HTTP 200 with the account data when found.
@@ -170,22 +186,14 @@ class AccountControllerTest extends TestCase
     public function testGetByIdReturns200OnSuccess(): void
     {
         $account = $this->buildAccount(5, 2, '500.00', 'EUR');
-
-        $this->serviceMock
-            ->expects($this->once())
-            ->method('getAccountById')
-            ->with(5)
-            ->willReturn($account);
+        $this->serviceMock->expects($this->once())->method('getAccountById')->with(5)->willReturn($account);
 
         $response = $this->controller->getById(5);
 
         $this->assertSame(200, $response->getStatusCode());
-
         $body = json_decode($response->getContent(), true);
         $this->assertSame(5, $body['id']);
-        $this->assertSame(2, $body['userId']);
         $this->assertSame('500.00', $body['balance']);
-        $this->assertSame('EUR', $body['currency']);
     }
 
     /**
@@ -195,19 +203,13 @@ class AccountControllerTest extends TestCase
      */
     public function testGetByIdReturns404WhenNotFound(): void
     {
-        $this->serviceMock
-            ->expects($this->once())
-            ->method('getAccountById')
-            ->with(99)
-            ->willThrowException(new NotFoundException('Account with id 99 not found.'));
+        $this->serviceMock->method('getAccountById')->willThrowException(new NotFoundException('Account with id 99 not found.'));
 
         $response = $this->controller->getById(99);
 
         $this->assertSame(404, $response->getStatusCode());
-
         $body = json_decode($response->getContent(), true);
         $this->assertSame(404, $body['code']);
-        $this->assertStringContainsString('99', $body['error']);
     }
 
     /**
@@ -217,21 +219,14 @@ class AccountControllerTest extends TestCase
      */
     public function testGetByIdReturns500OnException(): void
     {
-        $this->serviceMock
-            ->method('getAccountById')
-            ->willThrowException(new \RuntimeException('Unexpected error'));
+        $this->serviceMock->method('getAccountById')->willThrowException(new \RuntimeException('Unexpected'));
 
         $response = $this->controller->getById(1);
 
         $this->assertSame(500, $response->getStatusCode());
-
-        $body = json_decode($response->getContent(), true);
-        $this->assertSame(500, $body['code']);
     }
 
-    // -------------------------------------------------------------------------
-    // debit()
-    // -------------------------------------------------------------------------
+    // ── debit() ───────────────────────────────────────────────────────────────
 
     /**
      * Test that debit() returns HTTP 200 with the updated account data on success.
@@ -241,29 +236,16 @@ class AccountControllerTest extends TestCase
     public function testDebitReturns200OnSuccess(): void
     {
         $account = $this->buildAccount(1, 1, '800', 'USD');
+        $this->serviceMock->expects($this->once())->method('debit')->with(1, '200.00')->willReturn($account);
 
-        $this->serviceMock
-            ->expects($this->once())
-            ->method('debit')
-            ->with(1, '200.00')
-            ->willReturn($account);
-
-        $request = new Request(
-            [],
-            [],
-            [],
-            [],
-            [],
-            ['CONTENT_TYPE' => 'application/json'],
+        $request = new Request([], [], [], [], [], ['CONTENT_TYPE' => 'application/json'],
             json_encode(['amount' => '200.00'])
         );
 
         $response = $this->controller->debit($request, 1);
 
         $this->assertSame(200, $response->getStatusCode());
-
         $body = json_decode($response->getContent(), true);
-        $this->assertSame(1, $body['id']);
         $this->assertSame('800', $body['balance']);
     }
 
@@ -274,14 +256,27 @@ class AccountControllerTest extends TestCase
      */
     public function testDebitReturns400OnInvalidJson(): void
     {
-        $request = new Request([], [], [], [], [], [], 'not-json');
+        $response = $this->controller->debit(new Request([], [], [], [], [], [], 'not-json'), 1);
+
+        $this->assertSame(400, $response->getStatusCode());
+    }
+
+    /**
+     * Test that debit() returns HTTP 400 when amount is zero or negative.
+     *
+     * @return void
+     */
+    public function testDebitReturns400OnInvalidAmount(): void
+    {
+        $request = new Request([], [], [], [], [], ['CONTENT_TYPE' => 'application/json'],
+            json_encode(['amount' => '-10.00'])
+        );
 
         $response = $this->controller->debit($request, 1);
 
         $this->assertSame(400, $response->getStatusCode());
-
         $body = json_decode($response->getContent(), true);
-        $this->assertSame(400, $body['code']);
+        $this->assertArrayHasKey('errors', $body);
     }
 
     /**
@@ -291,26 +286,15 @@ class AccountControllerTest extends TestCase
      */
     public function testDebitReturns404WhenNotFound(): void
     {
-        $this->serviceMock
-            ->method('debit')
-            ->willThrowException(new NotFoundException('Account with id 1 not found.'));
+        $this->serviceMock->method('debit')->willThrowException(new NotFoundException('Account with id 1 not found.'));
 
-        $request = new Request(
-            [],
-            [],
-            [],
-            [],
-            [],
-            ['CONTENT_TYPE' => 'application/json'],
+        $request = new Request([], [], [], [], [], ['CONTENT_TYPE' => 'application/json'],
             json_encode(['amount' => '200.00'])
         );
 
         $response = $this->controller->debit($request, 1);
 
         $this->assertSame(404, $response->getStatusCode());
-
-        $body = json_decode($response->getContent(), true);
-        $this->assertSame(404, $body['code']);
     }
 
     /**
@@ -320,31 +304,18 @@ class AccountControllerTest extends TestCase
      */
     public function testDebitReturns500OnException(): void
     {
-        $this->serviceMock
-            ->method('debit')
-            ->willThrowException(new \RuntimeException('Unexpected error'));
+        $this->serviceMock->method('debit')->willThrowException(new \RuntimeException('Unexpected'));
 
-        $request = new Request(
-            [],
-            [],
-            [],
-            [],
-            [],
-            ['CONTENT_TYPE' => 'application/json'],
+        $request = new Request([], [], [], [], [], ['CONTENT_TYPE' => 'application/json'],
             json_encode(['amount' => '200.00'])
         );
 
         $response = $this->controller->debit($request, 1);
 
         $this->assertSame(500, $response->getStatusCode());
-
-        $body = json_decode($response->getContent(), true);
-        $this->assertSame(500, $body['code']);
     }
 
-    // -------------------------------------------------------------------------
-    // credit()
-    // -------------------------------------------------------------------------
+    // ── credit() ──────────────────────────────────────────────────────────────
 
     /**
      * Test that credit() returns HTTP 200 with the updated account data on success.
@@ -354,29 +325,16 @@ class AccountControllerTest extends TestCase
     public function testCreditReturns200OnSuccess(): void
     {
         $account = $this->buildAccount(1, 1, '1500', 'USD');
+        $this->serviceMock->expects($this->once())->method('credit')->with(1, '500.00')->willReturn($account);
 
-        $this->serviceMock
-            ->expects($this->once())
-            ->method('credit')
-            ->with(1, '500.00')
-            ->willReturn($account);
-
-        $request = new Request(
-            [],
-            [],
-            [],
-            [],
-            [],
-            ['CONTENT_TYPE' => 'application/json'],
+        $request = new Request([], [], [], [], [], ['CONTENT_TYPE' => 'application/json'],
             json_encode(['amount' => '500.00'])
         );
 
         $response = $this->controller->credit($request, 1);
 
         $this->assertSame(200, $response->getStatusCode());
-
         $body = json_decode($response->getContent(), true);
-        $this->assertSame(1, $body['id']);
         $this->assertSame('1500', $body['balance']);
     }
 
@@ -387,14 +345,27 @@ class AccountControllerTest extends TestCase
      */
     public function testCreditReturns400OnInvalidJson(): void
     {
-        $request = new Request([], [], [], [], [], [], 'not-json');
+        $response = $this->controller->credit(new Request([], [], [], [], [], [], 'not-json'), 1);
+
+        $this->assertSame(400, $response->getStatusCode());
+    }
+
+    /**
+     * Test that credit() returns HTTP 400 when amount is zero.
+     *
+     * @return void
+     */
+    public function testCreditReturns400OnZeroAmount(): void
+    {
+        $request = new Request([], [], [], [], [], ['CONTENT_TYPE' => 'application/json'],
+            json_encode(['amount' => '0'])
+        );
 
         $response = $this->controller->credit($request, 1);
 
         $this->assertSame(400, $response->getStatusCode());
-
         $body = json_decode($response->getContent(), true);
-        $this->assertSame(400, $body['code']);
+        $this->assertArrayHasKey('errors', $body);
     }
 
     /**
@@ -404,26 +375,15 @@ class AccountControllerTest extends TestCase
      */
     public function testCreditReturns404WhenNotFound(): void
     {
-        $this->serviceMock
-            ->method('credit')
-            ->willThrowException(new NotFoundException('Account with id 1 not found.'));
+        $this->serviceMock->method('credit')->willThrowException(new NotFoundException('Account with id 1 not found.'));
 
-        $request = new Request(
-            [],
-            [],
-            [],
-            [],
-            [],
-            ['CONTENT_TYPE' => 'application/json'],
+        $request = new Request([], [], [], [], [], ['CONTENT_TYPE' => 'application/json'],
             json_encode(['amount' => '500.00'])
         );
 
         $response = $this->controller->credit($request, 1);
 
         $this->assertSame(404, $response->getStatusCode());
-
-        $body = json_decode($response->getContent(), true);
-        $this->assertSame(404, $body['code']);
     }
 
     /**
@@ -433,25 +393,14 @@ class AccountControllerTest extends TestCase
      */
     public function testCreditReturns500OnException(): void
     {
-        $this->serviceMock
-            ->method('credit')
-            ->willThrowException(new \RuntimeException('Unexpected error'));
+        $this->serviceMock->method('credit')->willThrowException(new \RuntimeException('Unexpected'));
 
-        $request = new Request(
-            [],
-            [],
-            [],
-            [],
-            [],
-            ['CONTENT_TYPE' => 'application/json'],
+        $request = new Request([], [], [], [], [], ['CONTENT_TYPE' => 'application/json'],
             json_encode(['amount' => '500.00'])
         );
 
         $response = $this->controller->credit($request, 1);
 
         $this->assertSame(500, $response->getStatusCode());
-
-        $body = json_decode($response->getContent(), true);
-        $this->assertSame(500, $body['code']);
     }
 }

@@ -275,6 +275,41 @@ Tokens expire after **1 hour**. Login again to get a fresh token.
 
 ---
 
+## Request Validation
+
+All write endpoints (`POST`) validate the request body via a typed DTO before processing. Invalid input returns HTTP `400` with an `errors` array:
+
+```json
+{"errors": ["userId must be a positive integer.", "currency must be a 3-character uppercase ISO 4217 code (e.g. \"USD\")."], "code": 400}
+```
+
+Validation rules per endpoint:
+
+| Endpoint | Field | Rule |
+|---|---|---|
+| `POST /user/register` | `name` | non-empty string |
+| | `email` | valid email format |
+| | `password` | minimum 6 characters |
+| `POST /user/login` | `email` | valid email format |
+| | `password` | non-empty string |
+| `POST /user` | `name` | non-empty string |
+| | `email` | valid email format |
+| `POST /account` | `userId` | positive integer |
+| | `balance` | non-negative numeric string |
+| | `currency` | 3-character uppercase ISO 4217 (e.g. `USD`) |
+| `POST /account/{id}/debit` | `amount` | positive numeric string |
+| `POST /account/{id}/credit` | `amount` | positive numeric string |
+| `POST /transaction` | `sourceAccountId` | positive integer |
+| | `destinationAccountId` | positive integer |
+| | `amount` | positive numeric string |
+| | `currency` | 3-character uppercase ISO 4217 |
+| `POST /ledger/entry` | `transactionId` | positive integer |
+| | `accountId` | positive integer |
+| | `entryType` | `"debit"` or `"credit"` |
+| | `amount` | positive numeric string |
+
+---
+
 ## API Quick Reference
 
 All examples below assume `$TOKEN` is set from the login step above.

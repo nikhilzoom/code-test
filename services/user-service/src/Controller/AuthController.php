@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\DTO\LoginDTO;
+use App\DTO\RegisterDTO;
 use App\Service\AuthService;
 use PhpCommon\Exception\AuthenticationException;
 use PhpCommon\Security\JwtService;
@@ -65,9 +67,9 @@ class AuthController extends AbstractController
     /**
      * Register a new user account.
      *
-     * Accepts a JSON body with `name`, `email`, and `password`. Hashes the
-     * password and persists the new user. Returns the created user data
-     * (password is never included in the response).
+     * Accepts a JSON body with `name`, `email`, and `password`. Validates the
+     * input via {@see RegisterDTO}, hashes the password, and persists the new user.
+     * Returns the created user data (password is never included in the response).
      *
      * Request format : POST /user/register
      *                  Content-Type: application/json
@@ -77,6 +79,7 @@ class AuthController extends AbstractController
      *                  {"id": 1, "name": "Alice", "email": "alice@example.com", "createdAt": "..."}
      *
      * Error responses: HTTP 400 {"error": "Invalid JSON body.", "code": 400}
+     *                  HTTP 400 {"errors": ["password must be at least 6 characters."], "code": 400}
      *                  HTTP 409 {"error": "Email already registered.", "code": 409}
      *                  HTTP 500 {"error": "...", "code": 500}
      *
@@ -91,12 +94,19 @@ class AuthController extends AbstractController
     {
         $data = json_decode($request->getContent(), true);
 
-        if (!is_array($data) || empty($data['name']) || empty($data['email']) || empty($data['password'])) {
+        if (!is_array($data)) {
             return new JsonResponse(['error' => 'Invalid JSON body.', 'code' => 400], 400);
         }
 
+        $dto    = new RegisterDTO($data);
+        $errors = $dto->validate();
+
+        if (!empty($errors)) {
+            return new JsonResponse(['errors' => $errors, 'code' => 400], 400);
+        }
+
         try {
-            $user = $this->authService->register($data);
+            $user = $this->authService->register($dto);
 
             return new JsonResponse([
                 'id'        => $user->getId(),
@@ -116,8 +126,8 @@ class AuthController extends AbstractController
     /**
      * Authenticate a user and return a signed JWT.
      *
-     * Validates the provided email and password. On success returns a signed
-     * HS256 JWT containing the user's ID and email, valid for 1 hour.
+     * Validates the provided email and password via {@see LoginDTO}. On success
+     * returns a signed HS256 JWT containing the user's ID and email, valid for 1 hour.
      *
      * Request format : POST /user/login
      *                  Content-Type: application/json
@@ -127,6 +137,7 @@ class AuthController extends AbstractController
      *                  {"token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."}
      *
      * Error responses: HTTP 400 {"error": "Invalid JSON body.", "code": 400}
+     *                  HTTP 400 {"errors": ["email must be a valid email address."], "code": 400}
      *                  HTTP 401 {"error": "Invalid credentials.", "code": 401}
      *
      * @Route("/user/login", name="user_login", methods={"POST"})
@@ -140,12 +151,19 @@ class AuthController extends AbstractController
     {
         $data = json_decode($request->getContent(), true);
 
-        if (!is_array($data) || empty($data['email']) || empty($data['password'])) {
+        if (!is_array($data)) {
             return new JsonResponse(['error' => 'Invalid JSON body.', 'code' => 400], 400);
         }
 
+        $dto    = new LoginDTO($data);
+        $errors = $dto->validate();
+
+        if (!empty($errors)) {
+            return new JsonResponse(['errors' => $errors, 'code' => 400], 400);
+        }
+
         try {
-            $token = $this->authService->login($data);
+            $token = $this->authService->login($dto);
 
             return new JsonResponse(['token' => $token]);
         } catch (AuthenticationException $e) {

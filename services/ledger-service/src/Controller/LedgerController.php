@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\DTO\LedgerEntryDTO;
 use App\Service\LedgerService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -41,8 +42,9 @@ class LedgerController extends AbstractController
     /**
      * Record a new ledger entry.
      *
-     * Accepts a JSON body with `transactionId`, `accountId`, `entryType`, and `amount` fields,
-     * records the ledger entry, and returns the persisted entry data with HTTP 201.
+     * Accepts a JSON body with `transactionId`, `accountId`, `entryType`, and `amount` fields.
+     * Validates the input via {@see LedgerEntryDTO}, records the ledger entry, and returns
+     * the persisted entry data with HTTP 201.
      *
      * Request format : POST /ledger/entry
      *                  Content-Type: application/json
@@ -52,6 +54,7 @@ class LedgerController extends AbstractController
      *                  {"id": 1, "transactionId": 1, "accountId": 2, "entryType": "debit", "amount": "100.00", "createdAt": "..."}
      *
      * Error response : HTTP 400 {"error": "Invalid JSON body.", "code": 400}
+     *                  HTTP 400 {"errors": ["entryType must be \"debit\" or \"credit\"."], "code": 400}
      *                  HTTP 500 {"error": "...", "code": 500}
      *
      * @Route("/ledger/entry", name="ledger_entry_create", methods={"POST"})
@@ -70,7 +73,14 @@ class LedgerController extends AbstractController
                 return new JsonResponse(['error' => 'Invalid JSON body.', 'code' => 400], 400);
             }
 
-            $entry = $this->ledgerService->recordEntry($data);
+            $dto    = new LedgerEntryDTO($data);
+            $errors = $dto->validate();
+
+            if (!empty($errors)) {
+                return new JsonResponse(['errors' => $errors, 'code' => 400], 400);
+            }
+
+            $entry = $this->ledgerService->recordEntry($dto);
 
             return new JsonResponse([
                 'id'            => $entry->getId(),

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service;
 
+use App\DTO\TransactionDTO;
 use App\Entity\Transaction;
 use App\Factory\TransactionFactory;
 use App\Repository\TransactionRepositoryInterface;
@@ -114,6 +115,26 @@ class TransactionServiceTest extends TestCase
     }
 
     /**
+     * Build a TransactionDTO with preset values.
+     *
+     * @param int    $sourceAccountId
+     * @param int    $destinationAccountId
+     * @param string $amount
+     * @param string $currency
+     *
+     * @return TransactionDTO
+     */
+    private function buildDto(int $sourceAccountId, int $destinationAccountId, string $amount, string $currency): TransactionDTO
+    {
+        return new TransactionDTO([
+            'sourceAccountId'      => $sourceAccountId,
+            'destinationAccountId' => $destinationAccountId,
+            'amount'               => $amount,
+            'currency'             => $currency,
+        ]);
+    }
+
+    /**
      * Test that initiateTransfer creates a pending transaction, calls all downstream services,
      * and returns the transaction with status 'completed' on the happy path.
      *
@@ -121,37 +142,19 @@ class TransactionServiceTest extends TestCase
      */
     public function testInitiateTransferHappyPath(): void
     {
-        $data = [
-            'sourceAccountId'      => 1,
-            'destinationAccountId' => 2,
-            'amount'               => '100.00',
-            'currency'             => 'USD',
-        ];
-
+        $dto         = $this->buildDto(1, 2, '100.00', 'USD');
         $transaction = $this->buildTransaction(1, 1, 2, '100.00', 'USD', 'pending');
 
-        $this->factoryMock
-            ->expects($this->once())
-            ->method('create')
-            ->willReturn($transaction);
-
-        $this->repositoryMock
-            ->expects($this->exactly(2))
-            ->method('save')
-            ->with($transaction);
+        $this->factoryMock->expects($this->once())->method('create')->with($dto)->willReturn($transaction);
+        $this->repositoryMock->expects($this->exactly(2))->method('save')->with($transaction);
 
         $responseMock = $this->createMock(ResponseInterface::class);
         $responseMock->method('getStatusCode')->willReturn(200);
-        $responseMock->method('getContent')->willReturn(
-            json_encode(['id' => 1, 'balance' => '1000.00', 'currency' => 'USD'])
-        );
+        $responseMock->method('getContent')->willReturn(json_encode(['id' => 1, 'balance' => '1000.00', 'currency' => 'USD']));
 
-        $this->httpClientMock
-            ->expects($this->exactly(6))
-            ->method('request')
-            ->willReturn($responseMock);
+        $this->httpClientMock->expects($this->exactly(6))->method('request')->willReturn($responseMock);
 
-        $result = $this->service->initiateTransfer($data);
+        $result = $this->service->initiateTransfer($dto);
 
         $this->assertSame($transaction, $result);
         $this->assertSame('completed', $result->getStatus());
@@ -165,30 +168,15 @@ class TransactionServiceTest extends TestCase
      */
     public function testInitiateTransferFailurePath(): void
     {
-        $data = [
-            'sourceAccountId'      => 1,
-            'destinationAccountId' => 2,
-            'amount'               => '100.00',
-            'currency'             => 'USD',
-        ];
-
+        $dto         = $this->buildDto(1, 2, '100.00', 'USD');
         $transaction = $this->buildTransaction(1, 1, 2, '100.00', 'USD', 'pending');
 
-        $this->factoryMock
-            ->expects($this->once())
-            ->method('create')
-            ->willReturn($transaction);
-
-        $this->repositoryMock
-            ->expects($this->exactly(2))
-            ->method('save')
-            ->with($transaction);
+        $this->factoryMock->expects($this->once())->method('create')->willReturn($transaction);
+        $this->repositoryMock->expects($this->exactly(2))->method('save')->with($transaction);
 
         $preflightResponse = $this->createMock(ResponseInterface::class);
         $preflightResponse->method('getStatusCode')->willReturn(200);
-        $preflightResponse->method('getContent')->willReturn(
-            json_encode(['id' => 1, 'balance' => '1000.00', 'currency' => 'USD'])
-        );
+        $preflightResponse->method('getContent')->willReturn(json_encode(['id' => 1, 'balance' => '1000.00', 'currency' => 'USD']));
 
         $this->httpClientMock
             ->expects($this->atLeastOnce())
@@ -200,15 +188,13 @@ class TransactionServiceTest extends TestCase
                 throw new \RuntimeException('Connection refused');
             });
 
-        $this->loggerMock
-            ->expects($this->once())
-            ->method('error');
+        $this->loggerMock->expects($this->once())->method('error');
 
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage('Connection refused');
 
         try {
-            $this->service->initiateTransfer($data);
+            $this->service->initiateTransfer($dto);
         } finally {
             $this->assertSame('failed', $transaction->getStatus());
         }
@@ -222,29 +208,18 @@ class TransactionServiceTest extends TestCase
      */
     public function testInitiateTransferThrowsWhenReceiverAccountNotFound(): void
     {
-        $data = [
-            'sourceAccountId'      => 1,
-            'destinationAccountId' => 99,
-            'amount'               => '100.00',
-            'currency'             => 'USD',
-        ];
+        $dto = $this->buildDto(1, 99, '100.00', 'USD');
 
         $notFoundResponse = $this->createMock(ResponseInterface::class);
         $notFoundResponse->method('getStatusCode')->willReturn(404);
 
-        $this->httpClientMock
-            ->expects($this->once())
-            ->method('request')
-            ->with('GET', 'http://nginx/account/99')
-            ->willReturn($notFoundResponse);
-
+        $this->httpClientMock->expects($this->once())->method('request')->with('GET', 'http://nginx/account/99')->willReturn($notFoundResponse);
         $this->factoryMock->expects($this->never())->method('create');
-        $this->repositoryMock->expects($this->never())->method('save');
 
         $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage('Destination account with id 99 not found.');
 
-        $this->service->initiateTransfer($data);
+        $this->service->initiateTransfer($dto);
     }
 
     /**
@@ -255,34 +230,22 @@ class TransactionServiceTest extends TestCase
      */
     public function testInitiateTransferThrowsWhenInsufficientBalance(): void
     {
-        $data = [
-            'sourceAccountId'      => 1,
-            'destinationAccountId' => 2,
-            'amount'               => '500.00',
-            'currency'             => 'USD',
-        ];
+        $dto = $this->buildDto(1, 2, '500.00', 'USD');
 
         $receiverResponse = $this->createMock(ResponseInterface::class);
         $receiverResponse->method('getStatusCode')->willReturn(200);
 
         $senderResponse = $this->createMock(ResponseInterface::class);
         $senderResponse->method('getStatusCode')->willReturn(200);
-        $senderResponse->method('getContent')->willReturn(
-            json_encode(['id' => 1, 'balance' => '100.00', 'currency' => 'USD'])
-        );
+        $senderResponse->method('getContent')->willReturn(json_encode(['id' => 1, 'balance' => '100.00', 'currency' => 'USD']));
 
-        $this->httpClientMock
-            ->expects($this->exactly(2))
-            ->method('request')
-            ->willReturnOnConsecutiveCalls($receiverResponse, $senderResponse);
-
+        $this->httpClientMock->expects($this->exactly(2))->method('request')->willReturnOnConsecutiveCalls($receiverResponse, $senderResponse);
         $this->factoryMock->expects($this->never())->method('create');
-        $this->repositoryMock->expects($this->never())->method('save');
 
         $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage('Insufficient balance. Available: 100.00, Required: 500.00.');
 
-        $this->service->initiateTransfer($data);
+        $this->service->initiateTransfer($dto);
     }
 
     /**
@@ -293,12 +256,7 @@ class TransactionServiceTest extends TestCase
      */
     public function testInitiateTransferThrowsWhenSameAccount(): void
     {
-        $data = [
-            'sourceAccountId'      => 5,
-            'destinationAccountId' => 5,
-            'amount'               => '100.00',
-            'currency'             => 'USD',
-        ];
+        $dto = $this->buildDto(5, 5, '100.00', 'USD');
 
         $this->factoryMock->expects($this->never())->method('create');
         $this->repositoryMock->expects($this->never())->method('save');
@@ -307,7 +265,7 @@ class TransactionServiceTest extends TestCase
         $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage('Source and destination accounts must not be the same.');
 
-        $this->service->initiateTransfer($data);
+        $this->service->initiateTransfer($dto);
     }
 
     /**
@@ -318,16 +276,9 @@ class TransactionServiceTest extends TestCase
     public function testGetTransactionByIdHappyPath(): void
     {
         $transaction = $this->buildTransaction(7, 1, 2, '50.00', 'EUR', 'completed');
+        $this->repositoryMock->expects($this->once())->method('findById')->with(7)->willReturn($transaction);
 
-        $this->repositoryMock
-            ->expects($this->once())
-            ->method('findById')
-            ->with(7)
-            ->willReturn($transaction);
-
-        $result = $this->service->getTransactionById(7);
-
-        $this->assertSame($transaction, $result);
+        $this->assertSame($transaction, $this->service->getTransactionById(7));
     }
 
     /**
@@ -337,11 +288,7 @@ class TransactionServiceTest extends TestCase
      */
     public function testGetTransactionByIdThrowsNotFoundException(): void
     {
-        $this->repositoryMock
-            ->expects($this->once())
-            ->method('findById')
-            ->with(99)
-            ->willReturn(null);
+        $this->repositoryMock->expects($this->once())->method('findById')->with(99)->willReturn(null);
 
         $this->expectException(NotFoundException::class);
         $this->expectExceptionMessage('Transaction with id 99 not found.');

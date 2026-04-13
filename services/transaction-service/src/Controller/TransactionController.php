@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\DTO\TransactionDTO;
 use App\Service\TransactionService;
 use PhpCommon\Exception\NotFoundException;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -43,9 +44,9 @@ class TransactionController extends AbstractController
      * Initiate a new fund transfer between two accounts.
      *
      * Accepts a JSON body with `sourceAccountId`, `destinationAccountId`, `amount`,
-     * and `currency` fields. Creates a pending transaction, debits the source account,
-     * credits the destination account, records both ledger entries, and returns the
-     * completed transaction. Returns HTTP 500 with status `failed` if any step fails.
+     * and `currency` fields. Validates the input via {@see TransactionDTO}, creates
+     * a pending transaction, debits the source account, credits the destination account,
+     * records both ledger entries, and returns the completed transaction.
      *
      * Request format : POST /transaction
      *                  Content-Type: application/json
@@ -56,9 +57,8 @@ class TransactionController extends AbstractController
      *                   "amount": "100.00", "currency": "USD", "status": "completed", "createdAt": "..."}
      *
      * Error response : HTTP 400 {"error": "Invalid JSON body.", "code": 400}
+     *                  HTTP 400 {"errors": ["amount must be a positive numeric value."], "code": 400}
      *                  HTTP 400 {"error": "Source and destination accounts must not be the same.", "code": 400}
-     *                  HTTP 400 {"error": "Destination account with id N not found.", "code": 400}
-     *                  HTTP 400 {"error": "Insufficient balance. Available: X, Required: Y.", "code": 400}
      *                  HTTP 500 {"error": "...", "code": 500}
      *
      * @Route("/transaction", name="transaction_initiate", methods={"POST"})
@@ -77,7 +77,14 @@ class TransactionController extends AbstractController
                 return new JsonResponse(['error' => 'Invalid JSON body.', 'code' => 400], 400);
             }
 
-            $transaction = $this->transactionService->initiateTransfer($data);
+            $dto    = new TransactionDTO($data);
+            $errors = $dto->validate();
+
+            if (!empty($errors)) {
+                return new JsonResponse(['errors' => $errors, 'code' => 400], 400);
+            }
+
+            $transaction = $this->transactionService->initiateTransfer($dto);
 
             return new JsonResponse([
                 'id'                   => $transaction->getId(),

@@ -4,41 +4,37 @@ declare(strict_types=1);
 
 namespace App\Factory;
 
+use App\DTO\UserDTO;
 use App\Entity\User;
-use PhpCommon\Factory\FactoryInterface;
 
 /**
- * Factory for creating {@see User} entity instances from raw data arrays.
+ * Factory for creating {@see User} entity instances from {@see UserDTO}.
  *
  * Centralises all User construction logic so that controllers and services
- * never instantiate User objects directly. Implements the shared
- * {@see FactoryInterface} contract.
+ * never instantiate User objects directly.
  *
  * @package App\Factory
  */
-class UserFactory implements FactoryInterface
+class UserFactory
 {
     /**
-     * Create and return a new User entity populated from the provided data array.
+     * Create and return a new User entity populated from the provided DTO.
      *
-     * Expected keys in $data:
-     * - `name`  (string) The user's full name.
-     * - `email` (string) The user's email address.
-     *
-     * The `createdAt` timestamp is set automatically to the current UTC time.
-     *
-     * @param array<string, mixed> $data Associative array containing `name` and `email`.
+     * @param UserDTO     $dto      Validated user data.
+     * @param string|null $password Optional pre-hashed password string.
      *
      * @return User The newly created and populated User entity.
      */
-    public function create(array $data): object
+    public function create(UserDTO $dto, ?string $password = null): User
     {
         $user = new User();
-        $user->setName((string) $data['name']);
-        $user->setEmail((string) $data['email']);
-        if (isset($data['password'])) {
-            $user->setPassword((string) $data['password']);
+        $user->setName($dto->name);
+        $user->setEmail($dto->email);
+
+        if ($password !== null) {
+            $user->setPassword($password);
         }
+
         $user->setCreatedAt(new \DateTimeImmutable());
 
         return $user;

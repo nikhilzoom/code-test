@@ -10,7 +10,7 @@ use Symfony\Component\HttpKernel\Kernel as BaseKernel;
  *
  * Bootstraps the Symfony application, registers bundles, and configures
  * the container and routing for the Ledger microservice.
- *
+
  * @package App
  */
 class Kernel extends BaseKernel

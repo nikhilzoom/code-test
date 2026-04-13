@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service;
 
+use App\DTO\TransactionDTO;
 use App\Entity\Transaction;
 use App\Factory\TransactionFactory;
 use App\Repository\TransactionRepositoryInterface;
@@ -85,13 +86,7 @@ class TransactionService
      * On any failure the transaction status is set to `failed`, the error is logged,
      * and the updated transaction is persisted before the exception is re-thrown.
      *
-     * Expected keys in $data:
-     * - `sourceAccountId`      (int)    The ID of the account to debit.
-     * - `destinationAccountId` (int)    The ID of the account to credit.
-     * - `amount`               (string) The transfer amount as a decimal string.
-     * - `currency`             (string) The ISO 4217 currency code.
-     *
-     * @param array<string, mixed> $data Associative array containing transfer data.
+     * @param TransactionDTO $dto Validated transfer data.
      *
      * @throws \InvalidArgumentException When sourceAccountId and destinationAccountId are the same.
      * @throws \InvalidArgumentException When the destination account does not exist.
@@ -100,15 +95,15 @@ class TransactionService
      *
      * @return Transaction The persisted Transaction entity with status `completed` or `failed`.
      */
-    public function initiateTransfer(array $data): Transaction
+    public function initiateTransfer(TransactionDTO $dto): Transaction
     {
-        if ((int) $data['sourceAccountId'] === (int) $data['destinationAccountId']) {
+        if ($dto->sourceAccountId === $dto->destinationAccountId) {
             throw new \InvalidArgumentException('Source and destination accounts must not be the same.');
         }
 
-        $sourceId      = (int) $data['sourceAccountId'];
-        $destinationId = (int) $data['destinationAccountId'];
-        $amount        = (string) $data['amount'];
+        $sourceId      = $dto->sourceAccountId;
+        $destinationId = $dto->destinationAccountId;
+        $amount        = $dto->amount;
 
         // Validate receiver account exists.
         $receiverResponse = $this->httpClient->request('GET', sprintf('http://nginx/account/%d', $destinationId));
@@ -131,8 +126,7 @@ class TransactionService
             );
         }
 
-        /** @var Transaction $transaction */
-        $transaction = $this->transactionFactory->create(array_merge($data, ['status' => 'pending']));
+        $transaction = $this->transactionFactory->create($dto);
         $this->transactionRepository->save($transaction);
 
         try {

@@ -4,44 +4,37 @@ declare(strict_types=1);
 
 namespace App\Factory;
 
+use App\DTO\TransactionDTO;
 use App\Entity\Transaction;
-use PhpCommon\Factory\FactoryInterface;
 
 /**
- * Factory for creating {@see Transaction} entity instances from raw data arrays.
+ * Factory for creating {@see Transaction} entity instances from {@see TransactionDTO}.
  *
  * Centralises all Transaction construction logic so that controllers and services
- * never instantiate Transaction objects directly. Implements the shared
- * {@see FactoryInterface} contract.
+ * never instantiate Transaction objects directly.
  *
  * @package App\Factory
  */
-class TransactionFactory implements FactoryInterface
+class TransactionFactory
 {
     /**
-     * Create and return a new Transaction entity populated from the provided data array.
+     * Create and return a new Transaction entity populated from the provided DTO.
      *
-     * Expected keys in $data:
-     * - `sourceAccountId`      (int)    The ID of the account to debit.
-     * - `destinationAccountId` (int)    The ID of the account to credit.
-     * - `amount`               (string) The transfer amount as a decimal string.
-     * - `currency`             (string) The ISO 4217 currency code (3 characters).
-     * - `status`               (string) Optional initial status; defaults to 'pending'.
+     * The initial status is always set to `pending`. The `createdAt` timestamp
+     * is set automatically to the current UTC time.
      *
-     * The `createdAt` timestamp is set automatically to the current UTC time.
-     *
-     * @param array<string, mixed> $data Associative array containing transaction data.
+     * @param TransactionDTO $dto Validated transaction data.
      *
      * @return Transaction The newly created and populated Transaction entity.
      */
-    public function create(array $data): object
+    public function create(TransactionDTO $dto): Transaction
     {
         $transaction = new Transaction();
-        $transaction->setSourceAccountId((int) $data['sourceAccountId']);
-        $transaction->setDestinationAccountId((int) $data['destinationAccountId']);
-        $transaction->setAmount((string) $data['amount']);
-        $transaction->setCurrency((string) $data['currency']);
-        $transaction->setStatus((string) ($data['status'] ?? 'pending'));
+        $transaction->setSourceAccountId($dto->sourceAccountId);
+        $transaction->setDestinationAccountId($dto->destinationAccountId);
+        $transaction->setAmount($dto->amount);
+        $transaction->setCurrency($dto->currency);
+        $transaction->setStatus('pending');
         $transaction->setCreatedAt(new \DateTimeImmutable());
 
         return $transaction;
