@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Service;
 
+use App\DTO\LoginDTO;
+use App\DTO\RegisterDTO;
+use App\DTO\UserDTO;
 use App\Entity\User;
 use App\Factory\UserFactory;
 use App\Repository\UserRepositoryInterface;
@@ -65,27 +68,23 @@ class AuthService
      * Validates that the email is not already taken, hashes the password
      * using bcrypt, creates the User entity via the factory, and persists it.
      *
-     * @param array<string, mixed> $data Must contain `name`, `email`, and `password` keys.
+     * @param RegisterDTO $dto Validated registration data containing `name`, `email`, and `password`.
      *
      * @throws \RuntimeException When the email address is already registered.
      *
      * @return User The newly created and persisted User entity.
      */
-    public function register(array $data): User
+    public function register(RegisterDTO $dto): User
     {
-        $existing = $this->userRepository->findByEmail((string) $data['email']);
+        $existing = $this->userRepository->findByEmail($dto->email);
         if ($existing !== null) {
             throw new \RuntimeException('Email already registered.');
         }
 
-        $hashedPassword = password_hash((string) $data['password'], PASSWORD_BCRYPT);
+        $hashedPassword = password_hash($dto->password, PASSWORD_BCRYPT);
 
-        /** @var User $user */
-        $user = $this->userFactory->create([
-            'name'     => $data['name'],
-            'email'    => $data['email'],
-            'password' => $hashedPassword,
-        ]);
+        $userDto        = new UserDTO(['name' => $dto->name, 'email' => $dto->email]);
+        $user           = $this->userFactory->create($userDto, $hashedPassword);
 
         $this->userRepository->save($user);
 
@@ -98,17 +97,17 @@ class AuthService
      * Looks up the user by email, verifies the password using bcrypt,
      * and issues a signed HS256 JWT containing the user's ID and email.
      *
-     * @param array<string, mixed> $data Must contain `email` and `password` keys.
+     * @param LoginDTO $dto Validated login data containing `email` and `password`.
      *
      * @throws AuthenticationException When the email is not found or the password does not match.
      *
      * @return string The signed JWT string.
      */
-    public function login(array $data): string
+    public function login(LoginDTO $dto): string
     {
-        $user = $this->userRepository->findByEmail((string) $data['email']);
+        $user = $this->userRepository->findByEmail($dto->email);
 
-        if ($user === null || !password_verify((string) $data['password'], $user->getPassword())) {
+        if ($user === null || !password_verify($dto->password, $user->getPassword())) {
             throw new AuthenticationException('Invalid credentials.');
         }
 

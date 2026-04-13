@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\DTO\UserDTO;
 use App\Service\UserService;
 use PhpCommon\Exception\NotFoundException;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -42,8 +43,9 @@ class UserController extends AbstractController
     /**
      * Create a new user.
      *
-     * Accepts a JSON body with `name` and `email` fields, creates the user,
-     * and returns the persisted user data with HTTP 201.
+     * Accepts a JSON body with `name` and `email` fields, validates the input
+     * via {@see UserDTO}, creates the user, and returns the persisted user data
+     * with HTTP 201.
      *
      * Request format : POST /user
      *                  Content-Type: application/json
@@ -53,6 +55,7 @@ class UserController extends AbstractController
      *                  {"id": 1, "name": "Alice", "email": "alice@example.com", "createdAt": "..."}
      *
      * Error response : HTTP 400 {"error": "Invalid JSON body.", "code": 400}
+     *                  HTTP 400 {"errors": ["email must be a valid email address."], "code": 400}
      *                  HTTP 500 {"error": "...", "code": 500}
      *
      * @Route("/user", name="user_create", methods={"POST"})
@@ -71,7 +74,14 @@ class UserController extends AbstractController
                 return new JsonResponse(['error' => 'Invalid JSON body.', 'code' => 400], 400);
             }
 
-            $user = $this->userService->createUser($data);
+            $dto    = new UserDTO($data);
+            $errors = $dto->validate();
+
+            if (!empty($errors)) {
+                return new JsonResponse(['errors' => $errors, 'code' => 400], 400);
+            }
+
+            $user = $this->userService->createUser($dto);
 
             return new JsonResponse([
                 'id'        => $user->getId(),
@@ -139,6 +149,8 @@ class UserController extends AbstractController
      * Error response : HTTP 500 {"error": "...", "code": 500}
      *
      * @Route("/user", name="user_list", methods={"GET"})
+     *
+     * @param void No parameters required.
      *
      * @return JsonResponse JSON array of all users (HTTP 200) or an error envelope.
      */

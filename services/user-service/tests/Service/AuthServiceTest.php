@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Tests\Service;
 
+use App\DTO\LoginDTO;
+use App\DTO\RegisterDTO;
 use App\Entity\User;
 use App\Factory\UserFactory;
 use App\Repository\UserRepositoryInterface;
@@ -13,7 +15,7 @@ use PhpCommon\Security\JwtService;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Unit tests for AuthService.
+ * Unit tests for {@see AuthService}.
  *
  * Covers registration (happy path, duplicate email) and login
  * (happy path, wrong password, unknown email).
@@ -72,27 +74,12 @@ class AuthServiceTest extends TestCase
         $user->setEmail('alice@example.com');
         $user->setCreatedAt(new \DateTimeImmutable());
 
-        $this->userRepository
-            ->expects($this->once())
-            ->method('findByEmail')
-            ->with('alice@example.com')
-            ->willReturn(null);
+        $this->userRepository->expects($this->once())->method('findByEmail')->with('alice@example.com')->willReturn(null);
+        $this->userFactory->expects($this->once())->method('create')->willReturn($user);
+        $this->userRepository->expects($this->once())->method('save')->with($user);
 
-        $this->userFactory
-            ->expects($this->once())
-            ->method('create')
-            ->willReturn($user);
-
-        $this->userRepository
-            ->expects($this->once())
-            ->method('save')
-            ->with($user);
-
-        $result = $this->authService->register([
-            'name'     => 'Alice',
-            'email'    => 'alice@example.com',
-            'password' => 'secret123',
-        ]);
+        $dto    = new RegisterDTO(['name' => 'Alice', 'email' => 'alice@example.com', 'password' => 'secret123']);
+        $result = $this->authService->register($dto);
 
         $this->assertSame($user, $result);
     }
@@ -109,16 +96,10 @@ class AuthServiceTest extends TestCase
 
         $existing = new User();
         $existing->setEmail('alice@example.com');
+        $this->userRepository->method('findByEmail')->willReturn($existing);
 
-        $this->userRepository
-            ->method('findByEmail')
-            ->willReturn($existing);
-
-        $this->authService->register([
-            'name'     => 'Alice',
-            'email'    => 'alice@example.com',
-            'password' => 'secret123',
-        ]);
+        $dto = new RegisterDTO(['name' => 'Alice', 'email' => 'alice@example.com', 'password' => 'secret123']);
+        $this->authService->register($dto);
     }
 
     /**
@@ -131,23 +112,16 @@ class AuthServiceTest extends TestCase
         $hash = password_hash('secret123', PASSWORD_BCRYPT);
 
         $user = new User();
+        $user->setId(1);
         $user->setEmail('alice@example.com');
         $user->setPassword($hash);
         $user->setCreatedAt(new \DateTimeImmutable());
 
-        $this->userRepository
-            ->method('findByEmail')
-            ->willReturn($user);
+        $this->userRepository->method('findByEmail')->willReturn($user);
+        $this->jwtService->expects($this->once())->method('encode')->willReturn('signed.jwt.token');
 
-        $this->jwtService
-            ->expects($this->once())
-            ->method('encode')
-            ->willReturn('signed.jwt.token');
-
-        $token = $this->authService->login([
-            'email'    => 'alice@example.com',
-            'password' => 'secret123',
-        ]);
+        $dto   = new LoginDTO(['email' => 'alice@example.com', 'password' => 'secret123']);
+        $token = $this->authService->login($dto);
 
         $this->assertSame('signed.jwt.token', $token);
     }
@@ -162,20 +136,15 @@ class AuthServiceTest extends TestCase
         $this->expectException(AuthenticationException::class);
 
         $hash = password_hash('correct-password', PASSWORD_BCRYPT);
-
         $user = new User();
         $user->setEmail('alice@example.com');
         $user->setPassword($hash);
         $user->setCreatedAt(new \DateTimeImmutable());
 
-        $this->userRepository
-            ->method('findByEmail')
-            ->willReturn($user);
+        $this->userRepository->method('findByEmail')->willReturn($user);
 
-        $this->authService->login([
-            'email'    => 'alice@example.com',
-            'password' => 'wrong-password',
-        ]);
+        $dto = new LoginDTO(['email' => 'alice@example.com', 'password' => 'wrong-password']);
+        $this->authService->login($dto);
     }
 
     /**
@@ -187,13 +156,9 @@ class AuthServiceTest extends TestCase
     {
         $this->expectException(AuthenticationException::class);
 
-        $this->userRepository
-            ->method('findByEmail')
-            ->willReturn(null);
+        $this->userRepository->method('findByEmail')->willReturn(null);
 
-        $this->authService->login([
-            'email'    => 'nobody@example.com',
-            'password' => 'secret123',
-        ]);
+        $dto = new LoginDTO(['email' => 'nobody@example.com', 'password' => 'secret123']);
+        $this->authService->login($dto);
     }
 }

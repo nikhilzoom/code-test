@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service;
 
+use App\DTO\UserDTO;
 use App\Entity\User;
 use App\Factory\UserFactory;
 use App\Repository\UserRepositoryInterface;
@@ -49,19 +50,18 @@ class UserService
     }
 
     /**
-     * Create a new user from the provided data and persist it.
+     * Create a new user from the provided DTO and persist it.
      *
      * Delegates entity construction to {@see UserFactory::create()} and
      * persists the result via the repository.
      *
-     * @param array<string, mixed> $data Associative array with keys `name` and `email`.
+     * @param UserDTO $dto Validated user creation data.
      *
      * @return User The newly created and persisted User entity.
      */
-    public function createUser(array $data): User
+    public function createUser(UserDTO $dto): User
     {
-        /** @var User $user */
-        $user = $this->userFactory->create($data);
+        $user = $this->userFactory->create($dto);
         $this->userRepository->save($user);
 
         return $user;

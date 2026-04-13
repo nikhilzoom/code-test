@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service;
 
+use App\DTO\UserDTO;
 use App\Entity\User;
 use App\Factory\UserFactory;
 use App\Repository\UserRepositoryInterface;
@@ -60,7 +61,7 @@ class UserServiceTest extends TestCase
      */
     public function testCreateUserHappyPath(): void
     {
-        $data = ['name' => 'Alice', 'email' => 'alice@example.com'];
+        $dto = new UserDTO(['name' => 'Alice', 'email' => 'alice@example.com']);
 
         $user = new User();
         $user->setName('Alice');
@@ -70,7 +71,7 @@ class UserServiceTest extends TestCase
         $this->factoryMock
             ->expects($this->once())
             ->method('create')
-            ->with($data)
+            ->with($dto)
             ->willReturn($user);
 
         $this->repositoryMock
@@ -78,7 +79,7 @@ class UserServiceTest extends TestCase
             ->method('save')
             ->with($user);
 
-        $result = $this->service->createUser($data);
+        $result = $this->service->createUser($dto);
 
         $this->assertSame($user, $result);
         $this->assertSame('Alice', $result->getName());

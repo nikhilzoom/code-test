@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Command;
 
+use App\DTO\RegisterDTO;
 use App\Service\AuthService;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -106,7 +107,7 @@ class SeedUsersCommand extends Command
             }
 
             try {
-                $this->authService->register($data);
+                $this->authService->register(new RegisterDTO($data));
                 $io->text(sprintf('  <info>✔</info> Seeded: %s <%s>', $data['name'], $data['email']));
                 $seeded++;
             } catch (\RuntimeException $e) {

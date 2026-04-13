@@ -27,12 +27,12 @@ class User
      * @ORM\GeneratedValue
      * @ORM\Column(type="integer")
      *
-     * @var int
+     * @var int|null
      */
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column(type: 'integer')]
-    private int $id;
+    private ?int $id = null;
 
     /**
      * The full name of the user (max 100 characters).
@@ -77,9 +77,9 @@ class User
     /**
      * Get the user's primary key identifier.
      *
-     * @return int The user ID.
+     * @return int|null The user ID, or null if not yet persisted.
      */
-    public function getId(): int
+    public function getId(): ?int
     {
         return $this->id;
     }

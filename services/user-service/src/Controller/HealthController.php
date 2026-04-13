@@ -31,6 +31,8 @@ class HealthController extends AbstractController
      *
      * @Route("/user/health", name="health_check", methods={"GET"})
      *
+     * @param void No parameters required.
+     *
      * @return JsonResponse JSON response containing the service status
      */
     #[Route('/user/health', name: 'health_check', methods: ['GET'])]

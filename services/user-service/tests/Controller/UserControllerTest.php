@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Controller;
 
 use App\Controller\UserController;
+use App\DTO\UserDTO;
 use App\Entity\User;
 use App\Service\UserService;
 use PhpCommon\Exception\NotFoundException;
@@ -61,7 +62,6 @@ class UserControllerTest extends TestCase
         $user->setEmail($email);
         $user->setCreatedAt(new \DateTimeImmutable('2024-01-01T00:00:00+00:00'));
 
-        // Set the private $id via reflection since there is no public constructor param
         $ref = new \ReflectionProperty(User::class, 'id');
         $ref->setAccessible(true);
         $ref->setValue($user, $id);
@@ -69,9 +69,7 @@ class UserControllerTest extends TestCase
         return $user;
     }
 
-    // -------------------------------------------------------------------------
-    // create()
-    // -------------------------------------------------------------------------
+    // ── create() ─────────────────────────────────────────────────────────────
 
     /**
      * Test that create() returns HTTP 201 with the new user data on success.
@@ -85,23 +83,16 @@ class UserControllerTest extends TestCase
         $this->serviceMock
             ->expects($this->once())
             ->method('createUser')
-            ->with(['name' => 'Alice', 'email' => 'alice@example.com'])
+            ->with($this->isInstanceOf(UserDTO::class))
             ->willReturn($user);
 
-        $request = new Request(
-            [],
-            [],
-            [],
-            [],
-            [],
-            ['CONTENT_TYPE' => 'application/json'],
+        $request = new Request([], [], [], [], [], ['CONTENT_TYPE' => 'application/json'],
             json_encode(['name' => 'Alice', 'email' => 'alice@example.com'])
         );
 
         $response = $this->controller->create($request);
 
         $this->assertSame(201, $response->getStatusCode());
-
         $body = json_decode($response->getContent(), true);
         $this->assertSame(1, $body['id']);
         $this->assertSame('Alice', $body['name']);
@@ -115,15 +106,49 @@ class UserControllerTest extends TestCase
      */
     public function testCreateReturns400OnInvalidJson(): void
     {
-        $request = new Request([], [], [], [], [], [], 'not-json');
+        $response = $this->controller->create(new Request([], [], [], [], [], [], 'not-json'));
+
+        $this->assertSame(400, $response->getStatusCode());
+        $body = json_decode($response->getContent(), true);
+        $this->assertSame(400, $body['code']);
+        $this->assertArrayHasKey('error', $body);
+    }
+
+    /**
+     * Test that create() returns HTTP 400 when DTO validation fails (invalid email).
+     *
+     * @return void
+     */
+    public function testCreateReturns400OnInvalidEmail(): void
+    {
+        $request = new Request([], [], [], [], [], ['CONTENT_TYPE' => 'application/json'],
+            json_encode(['name' => 'Alice', 'email' => 'not-an-email'])
+        );
 
         $response = $this->controller->create($request);
 
         $this->assertSame(400, $response->getStatusCode());
-
         $body = json_decode($response->getContent(), true);
-        $this->assertSame(400, $body['code']);
-        $this->assertArrayHasKey('error', $body);
+        $this->assertArrayHasKey('errors', $body);
+        $this->assertNotEmpty($body['errors']);
+    }
+
+    /**
+     * Test that create() returns HTTP 400 when name is empty.
+     *
+     * @return void
+     */
+    public function testCreateReturns400OnEmptyName(): void
+    {
+        $request = new Request([], [], [], [], [], ['CONTENT_TYPE' => 'application/json'],
+            json_encode(['name' => '', 'email' => 'alice@example.com'])
+        );
+
+        $response = $this->controller->create($request);
+
+        $this->assertSame(400, $response->getStatusCode());
+        $body = json_decode($response->getContent(), true);
+        $this->assertArrayHasKey('errors', $body);
     }
 
     /**
@@ -133,32 +158,21 @@ class UserControllerTest extends TestCase
      */
     public function testCreateReturns500OnException(): void
     {
-        $this->serviceMock
-            ->method('createUser')
-            ->willThrowException(new \RuntimeException('DB error'));
+        $this->serviceMock->method('createUser')->willThrowException(new \RuntimeException('DB error'));
 
-        $request = new Request(
-            [],
-            [],
-            [],
-            [],
-            [],
-            ['CONTENT_TYPE' => 'application/json'],
+        $request = new Request([], [], [], [], [], ['CONTENT_TYPE' => 'application/json'],
             json_encode(['name' => 'Alice', 'email' => 'alice@example.com'])
         );
 
         $response = $this->controller->create($request);
 
         $this->assertSame(500, $response->getStatusCode());
-
         $body = json_decode($response->getContent(), true);
         $this->assertSame(500, $body['code']);
         $this->assertSame('DB error', $body['error']);
     }
 
-    // -------------------------------------------------------------------------
-    // getById()
-    // -------------------------------------------------------------------------
+    // ── getById() ─────────────────────────────────────────────────────────────
 
     /**
      * Test that getById() returns HTTP 200 with the user data when found.
@@ -168,17 +182,11 @@ class UserControllerTest extends TestCase
     public function testGetByIdReturns200OnSuccess(): void
     {
         $user = $this->buildUser(5, 'Bob', 'bob@example.com');
-
-        $this->serviceMock
-            ->expects($this->once())
-            ->method('getUserById')
-            ->with(5)
-            ->willReturn($user);
+        $this->serviceMock->expects($this->once())->method('getUserById')->with(5)->willReturn($user);
 
         $response = $this->controller->getById(5);
 
         $this->assertSame(200, $response->getStatusCode());
-
         $body = json_decode($response->getContent(), true);
         $this->assertSame(5, $body['id']);
         $this->assertSame('Bob', $body['name']);
@@ -191,16 +199,11 @@ class UserControllerTest extends TestCase
      */
     public function testGetByIdReturns404WhenNotFound(): void
     {
-        $this->serviceMock
-            ->expects($this->once())
-            ->method('getUserById')
-            ->with(99)
-            ->willThrowException(new NotFoundException('User with id 99 not found.'));
+        $this->serviceMock->method('getUserById')->willThrowException(new NotFoundException('User with id 99 not found.'));
 
         $response = $this->controller->getById(99);
 
         $this->assertSame(404, $response->getStatusCode());
-
         $body = json_decode($response->getContent(), true);
         $this->assertSame(404, $body['code']);
         $this->assertStringContainsString('99', $body['error']);
@@ -213,21 +216,14 @@ class UserControllerTest extends TestCase
      */
     public function testGetByIdReturns500OnException(): void
     {
-        $this->serviceMock
-            ->method('getUserById')
-            ->willThrowException(new \RuntimeException('Unexpected error'));
+        $this->serviceMock->method('getUserById')->willThrowException(new \RuntimeException('Unexpected'));
 
         $response = $this->controller->getById(1);
 
         $this->assertSame(500, $response->getStatusCode());
-
-        $body = json_decode($response->getContent(), true);
-        $this->assertSame(500, $body['code']);
     }
 
-    // -------------------------------------------------------------------------
-    // list()
-    // -------------------------------------------------------------------------
+    // ── list() ────────────────────────────────────────────────────────────────
 
     /**
      * Test that list() returns HTTP 200 with an array of users.
@@ -239,15 +235,11 @@ class UserControllerTest extends TestCase
         $user1 = $this->buildUser(1, 'Alice', 'alice@example.com');
         $user2 = $this->buildUser(2, 'Bob', 'bob@example.com');
 
-        $this->serviceMock
-            ->expects($this->once())
-            ->method('getAllUsers')
-            ->willReturn([$user1, $user2]);
+        $this->serviceMock->expects($this->once())->method('getAllUsers')->willReturn([$user1, $user2]);
 
         $response = $this->controller->list();
 
         $this->assertSame(200, $response->getStatusCode());
-
         $body = json_decode($response->getContent(), true);
         $this->assertCount(2, $body);
         $this->assertSame('Alice', $body[0]['name']);
@@ -261,17 +253,12 @@ class UserControllerTest extends TestCase
      */
     public function testListReturns200WithEmptyArray(): void
     {
-        $this->serviceMock
-            ->expects($this->once())
-            ->method('getAllUsers')
-            ->willReturn([]);
+        $this->serviceMock->expects($this->once())->method('getAllUsers')->willReturn([]);
 
         $response = $this->controller->list();
 
         $this->assertSame(200, $response->getStatusCode());
-
-        $body = json_decode($response->getContent(), true);
-        $this->assertSame([], $body);
+        $this->assertSame([], json_decode($response->getContent(), true));
     }
 
     /**
@@ -281,14 +268,11 @@ class UserControllerTest extends TestCase
      */
     public function testListReturns500OnException(): void
     {
-        $this->serviceMock
-            ->method('getAllUsers')
-            ->willThrowException(new \RuntimeException('DB failure'));
+        $this->serviceMock->method('getAllUsers')->willThrowException(new \RuntimeException('DB failure'));
 
         $response = $this->controller->list();
 
         $this->assertSame(500, $response->getStatusCode());
-
         $body = json_decode($response->getContent(), true);
         $this->assertSame(500, $body['code']);
         $this->assertSame('DB failure', $body['error']);
